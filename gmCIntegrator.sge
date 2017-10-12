@@ -1,0 +1,23 @@
+#
+#!/bin/bash
+#
+#
+# Make sure that the .e (error) and .o (output) file arrive in the
+# working directory
+#$ -cwd
+#
+#Merge the standard out and standard error to one file
+#
+#$ -j y
+#$ -o log/
+#Show error message if job is not able to run with existing resource configuration
+#$ -w e
+#
+#   Set mail address and send a mail on job's start, end and abort
+#$ -M malmberg@isi.ee.ethz.ch
+#
+#$ -t 1-5000
+#
+#
+# binary to execute
+/home/merik/anaconda3/bin/python gmCIntegratorChainParallel.py $SGE_TASK_ID 5000 > sqe/Integrator$SGE_TASK_ID.out

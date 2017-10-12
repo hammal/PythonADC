@@ -1,0 +1,28 @@
+#
+#!/bin/bash
+#
+#
+# Make sure that the .e (error) and .o (output) file arrive in the
+# working directory
+#$ -cwd
+#
+#Merge the standard out and standard error to one file
+#
+#$ -j y
+#$ -o log/
+#Show error message if job is not able to run with existing resource configuration
+#$ -w e
+#
+#   Set mail address and send a mail on job's start, end and abort
+#$ -M malmberg@isi.ee.ethz.ch
+#
+#$ -t 1-5000
+#
+#
+# binary to execute
+/home/merik/anaconda3/bin/python gmCADCParallelNumberComparisson.py $SGE_TASK_ID 5000 0 > sqe/OscillatorNumberComparisson0.$SGE_TASK_ID.out
+/home/merik/anaconda3/bin/python gmCADCParallelNumberComparisson.py $SGE_TASK_ID 5000 1 > sqe/OscillatorNumberComparisson1.$SGE_TASK_ID.out
+/home/merik/anaconda3/bin/python gmCADCParallelNumberComparisson.py $SGE_TASK_ID 5000 2 > sqe/OscillatorNumberComparisson2.$SGE_TASK_ID.out
+/home/merik/anaconda3/bin/python gmCADCParallelNumberComparisson.py $SGE_TASK_ID 5000 3 > sqe/OscillatorNumberComparisson3.$SGE_TASK_ID.out
+/home/merik/anaconda3/bin/python gmCADCParallelNumberComparisson.py $SGE_TASK_ID 5000 4 > sqe/OscillatorNumberComparisson4.$SGE_TASK_ID.out
+/home/merik/anaconda3/bin/python gmCIntegratorChainParalleNumberReference.py $SGE_TASK_ID 5000 > sqe/OscillatorNumberComparissonRef.$SGE_TASK_ID.out
