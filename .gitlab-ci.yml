@@ -1,12 +1,12 @@
 image: continuumio/anaconda
 
 before_script:
-  - conda install -y scipy
-  - pip install cvxopt
-  - mkdir -p /root/.config/matplotlib
-  - echo "backend : Agg" > /root/.config/matplotlib/matplotlibrc
+  - "conda install -y scipy"
+  - "pip install cvxopt"
+  - "mkdir -p /root/.config/matplotlib"
+  - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
 
 
 gmCADC:
   script:
-    - python gmCADC.py
+    - "python gmCADC.py"
