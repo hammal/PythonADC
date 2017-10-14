@@ -8,7 +8,7 @@ before_script:
 
 gmCADC:
   script:
-    - "python gmCADC.py
+    - "python gmCADC.py"
     - "python gmCADCMultipleObservations.py"
     - "python gmCADCObservations.py"
     - "python gmCADCParallel.py"
@@ -35,6 +35,7 @@ various:
     - "python selfControllinggmCADC.py"
     - "python SigmaDeltaExample.py"
     - "python topologiExample.py"
+
 
 simulator:
   script:
