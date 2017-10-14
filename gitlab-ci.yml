@@ -1,3 +1,5 @@
+image: continuumio/anaconda
+
 before_script:
   - docker info
   - docker build -t condaPython .
