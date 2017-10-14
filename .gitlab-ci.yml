@@ -1,9 +1,12 @@
 image: continuumio/anaconda
 
 before_script:
-  - docker info
-  - docker build -t condaPython .
+  - conda install -y scipy
+  - pip install cvxopt
+  - mkdir -p /root/.config/matplotlib
+  - echo "backend : Agg" > /root/.config/matplotlib/matplotlibrc
 
-build_image:
+
+gmCADC:
   script:
-    - docker run -v $(pwd)/:/data sh -c "cd /data; python gmCADC.py"
+    - python gmCADC.py
