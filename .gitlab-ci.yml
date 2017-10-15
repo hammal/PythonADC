@@ -21,7 +21,7 @@ gmCIntegrator:
     - "python gmCIntegratorChain.py"
     - "python gmCIntegratorChainParallel.py 1 10 1"
     - "python gmCIntegratorChainParalleNumberReference.py 1 10 1"
-    - "python gmCIntegratorChainFullWiener.py"
+    - "python gmCIntegratorFullWiener.py"
 
 integratorVsFeedback:
   script:
