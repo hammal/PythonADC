@@ -74,7 +74,7 @@ filterSpec = {
     # 'eta2': 2.762478e+04,
     'eta2': 2.453811e+02,
     'model': model,
-    'Ts': Ts
+    'Tc': Ts
 }
 
 filter = ADC.WienerFilter(**filterSpec)

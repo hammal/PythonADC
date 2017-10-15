@@ -94,7 +94,7 @@ controller, y = simulator.Run()
 filterSpec = {
     'eta2': eta2[ETA2INDEX],
     'model': model,
-    'Ts': Ts
+    'Tc': Ts
 }
 
 filter = ADC.WienerFilter(**filterSpec)

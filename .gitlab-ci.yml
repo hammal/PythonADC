@@ -11,16 +11,16 @@ gmCADC:
     - "python gmCADC.py"
     - "python gmCADCMultipleObservations.py"
     - "python gmCADCObservations.py"
-    - "python gmCADCParallel.py"
-    - "python gmCADCParallelCompensatedGain.py"
-    - "python gmCADCParallelNumberComparisson.py"
+    - "python gmCADCParallel.py 1 10 1"
+    - "python gmCADCParallelCompensatedGain.py 1 10 1"
+    - "python gmCADCParallelNumberComparisson.py 1 10 1"
     - "python gmCFullWienerFilter.py"
 
 gmCIntegrator:
   script:
     - "python gmCIntegratorChain.py"
-    - "python gmCIntegratorChainParallel.py"
-    - "python gmCIntegratorChainParallelNumberReference.py"
+    - "python gmCIntegratorChainParallel.py 1 10 1"
+    - "python gmCIntegratorChainParalleNumberReference.py 1 10 1"
     - "python gmCIntegratorChainFullWiener.py"
 
 integratorVsFeedback:
@@ -31,21 +31,22 @@ various:
   script:
     - "python LMSFilter.py"
     - "python parallelIntegrator.py"
-    - "python reconstructionExample.py"
+    # - "python reconstructionExample.py"
     - "python selfControllinggmCADC.py"
-    - "python SigmaDeltaExample.py"
-    - "python topologiExample.py"
+    # - "python SigmaDeltaExample.py"
+    # - "python topologiExample.py"
 
 
 simulator:
   script:
     - "python simulate.py"
-    - "python simulator_Example.py"
+    # - "python simulator_Example.py"
     # - "python sqe_plot.py"
 
 transmissionline:
   script:
-    - "python transmissionLine.py"
+    echo "To be done"
+    # - "python transmissionLine.py"
 
 randomMESH:
   script:
