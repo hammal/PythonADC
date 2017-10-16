@@ -1,4 +1,4 @@
-# Trigger build
+## Trigger build
 image: continuumio/anaconda
 
 before_script:
