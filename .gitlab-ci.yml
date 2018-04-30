@@ -53,3 +53,7 @@ randomMESH:
   script:
     - "python randomMESHADC.py"
     - "python randomTransformedADC.py"
+
+discreteTime:
+    script:
+      - "python DiscreteTimeIntegratorChain.py"

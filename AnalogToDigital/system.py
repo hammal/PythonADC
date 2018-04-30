@@ -125,6 +125,61 @@ class Model(object):
             y[index] = np.dot(self.c.transpose(), state)
         return y
 
+class DiscreteModel(Model):
+
+    def discretize(self, Ts):
+        # Discretize state space matrix
+        self.fs = 1./Ts
+        self.Ad = self.A
+        self.Bd = self.B
+        self.bd = self.b
+
+    def discretize_full(Ts):
+        raise NotImplemented("This is not an option for discrete models.")
+
+    def zeroOrderHold(self, M, Ts):
+        raise NotImplemented("This is not a applicable function in the discrete model case.")
+
+    def frequncyResponse(self, frequency):
+        raise NotImplemented("This is not a applicable function in the discrete model case.")
+
+    def systemInverse(self, z):
+        raise NotImplemented("This is not a applicable function in the discrete model case.")
+
+    def discreteTimeFrequencyResponse(self, frequency):
+        z = np.exp(np.complex(0., 2. * np.pi * frequency / self.fs))
+        systemInverse = z * np.eye(self.order) - self.Ad
+        print(frequency, self.fs)
+        return np.dot(self.c, np.dot(np.linalg.inv(systemInverse), self.bd))
+
+    def discreteImpulseResponse(self, numberOfPoints):
+        state = self.bd
+        impulseResponse = np.zeros(numberOfPoints)
+        for index in range(numberOfPoints):
+            impulseResponse[index] = np.dot(self.c, state)
+            state = np.dot(self.Ad, state)
+        return impulseResponse
+
+    def plotImpulseResponse(self, numberOfPoints=100000):
+        fig = plt.figure()
+        ax1 = fig.add_subplot(1, 1, 1)
+        T = np.arange(numberOfPoints) / self.fs
+        h = self.discreteImpulseResponse(numberOfPoints)
+        ax1.plot(T, h)
+        plt.show()
+
+    def plotFrequencyResponse(self, numberOfPoints=1000):
+        raise NotImplemented("This is not a applicable function in the discrete model case.")
+
+    def filter(self, signal):
+        state = np.zeros((self.A.shape[0], 1))
+        y = np.zeros_like(signal)
+        for index, value in enumerate(signal):
+            state = np.dot(self.Ad, state) + np.dot(self.bd, value)
+            y[index] = np.dot(self.c.transpose(), state)
+        return y
+
+
 class Controller(object):
     def __init__(self, model, fs, fc, size):
         self.model = model

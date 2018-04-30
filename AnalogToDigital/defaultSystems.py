@@ -1,5 +1,6 @@
 import numpy as np
 from .system import Model
+from .system import DiscreteModel
 
 class DefaultSystems(object):
     """
@@ -141,6 +142,15 @@ class DefaultSystems(object):
         B[0:size:2] = - 1 / C
         B = np.diag(B)
         return Model(A, B, b, c)
+
+
+    def discreteIntegratorChain(self, size):
+        A = 1. * np.eye(size) + 1./2.*np.eye(size, k=-1)
+        b = np.zeros((size, 1))
+        b[0,0] = 1./2.
+        B = -1./2. * np.eye(size)
+        c = np.eye(size)
+        return DiscreteModel(A,B,b,c)
 
 if __name__ == "__main__":
     import doctest
