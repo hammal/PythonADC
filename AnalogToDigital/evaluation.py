@@ -25,7 +25,7 @@ class Evaluation(object):
         """
         Compute the transferfunction for an array of frequencies f
         """
-        output = np.zeros((f.size, self.system.outputOrder))
+        output = np.zeros((f.size, self.system.outputOrder), dtype=np.complex)
 
         for index, freq in enumerate(f):
             try:
