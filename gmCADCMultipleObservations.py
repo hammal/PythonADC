@@ -55,7 +55,7 @@ print(model)
 print(b)
 
 fsignal = 1e2
-fsignal = fp/np.sqrt(2.)
+# fsignal = fp/np.sqrt(2.)
 
 Tc = 1./15e3
 length = int(1e5)

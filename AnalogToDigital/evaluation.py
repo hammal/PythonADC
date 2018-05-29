@@ -118,8 +118,8 @@ class Evaluation(object):
     def findMaxAndMean(self, array):
         offset = 30
         indexMax = np.argmax(np.abs(array), axis = 0)
-        mean = np.mean(array[5:indexMax - offset, :], axis=0)
-        mean = np.amax(array[5:indexMax - offset, :], axis=0)
+        mean = np.mean(array[5:indexMax[0] - offset, :], axis=0)
+        mean = np.amax(array[5:indexMax[0] - offset, :], axis=0)
         return array[indexMax], mean
 
     def PlotTransferFunctions(self, freq):
