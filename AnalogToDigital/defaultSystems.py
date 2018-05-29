@@ -1,5 +1,5 @@
 import numpy as np
-from .system import Model
+from .system import System
 
 class DefaultSystems(object):
     """
@@ -9,18 +9,6 @@ class DefaultSystems(object):
 
     def __init__(self):
         pass
-
-    def whiteNoise(self, length):
-        """
-        This function returns a Gaussian white noise vecor as
-
-        Example:
-        >>> whiteNoiseVector = whiteNoise(100)
-        >>> whiteNoiseVector.size
-        100
-
-        """
-        return np.random.randn(length)
 
 
     def integratorChain(self, size, rho=0.):
@@ -38,7 +26,7 @@ class DefaultSystems(object):
         b[0] = 1.
         c[-1] = 1.
 
-        return Model(A, np.zeros_like(A), b, c)
+        return System(A, c), b
 
     def gmCIntergratorChain(self, size, gm, C):
         """
@@ -63,7 +51,7 @@ class DefaultSystems(object):
 
         # Make all states observable
         # c = np.eye(size)
-        return Model(A, np.zeros_like(A), b, c)
+        return System(A, c), b.flatten()
 
     def gmCChain(self, size, gm1, gm2, C):
         """
@@ -93,7 +81,7 @@ class DefaultSystems(object):
 
         # Make all states observable
         # c = np.eye(size)
-        return Model(A, np.zeros_like(A), b, c)
+        return System(A, c), b.flatten()
 
     def transmissionLine(self, size, Rs = 0., L = 1e-6, Gp = 0., C = 1e-7):
         """
@@ -140,7 +128,7 @@ class DefaultSystems(object):
         B = np.zeros(size)
         B[0:size:2] = - 1 / C
         B = np.diag(B)
-        return Model(A, B, b, c)
+        return System(A, c), b.flatten()
 
 if __name__ == "__main__":
     import doctest
