@@ -18,7 +18,7 @@ class Input(object):
         return self.steeringVector * self.scalarFunction(t)
 
 
-    def c(self, t):
+    def scalarFunction(self, t):
         """
         This is the main function used by the simulation tool to determine the
         input signal at some input time t.

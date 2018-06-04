@@ -2,6 +2,7 @@
 
 import numpy as np
 import scipy.linalg
+from topologiGenerator import SystemTransformations
 # from cvxopt import matrix, solvers
 # import copy
 from scipy.integrate import odeint
@@ -11,10 +12,15 @@ def care(A, B, Q, R):
     """
     This function solves the forward and backward continuous Riccati equation.
     """
-    # print("Solve CARE for:")
-    # print(A,B,Q,R)
+    print("Solve CARE for:")
+    print(A)
+    print(B)
+    print(Q)
+    print(R)
     Vf = scipy.linalg.solve_continuous_are(A, B, Q, R)
     Vb = scipy.linalg.solve_continuous_are(-A, B, Q, R)
+    # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
+    # res1 = np.dot(A.transpose(), Vf) + np.dot(Vf, A) - np.dot(Vf, np.dot(B, np.dot(np.lina)))
     return Vf, Vb
 #
 #
@@ -131,11 +137,12 @@ class WienerFilter(object):
         self.Ts = t[1] - t[0]
         self.system = system
         self.inputs = inputs
+        self.order = self.system.order
 
         if 'eta2' in options:
             self.eta2 = options['eta2']
         else:
-            self.eta2 = np.ones(self.system.order)
+            self.eta2 = np.ones(self.order)
 
         if 'sigmaU2' in options:
             self.sigmaU2 = options['sigmaU2']
@@ -143,10 +150,10 @@ class WienerFilter(object):
             self.sigmaU2 = np.ones(len(inputs))
 
         # Solve care
-        # A^TX + X A + X B (R)^(-1) B^T X + Q = 0
+        # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
         A = self.system.A.transpose()
         B = self.system.c
-        Q = np.zeros((self.system.order, self.system.order))
+        Q = np.zeros((self.order, self.order))
         for index, input in enumerate(inputs):
             Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
         R = np.diag(self.eta2)
@@ -164,7 +171,7 @@ class WienerFilter(object):
 
         self.Ab = scipy.linalg.expm(-self.tempAb * self.Ts)
 
-        B = np.zeros((self.system.order, len(inputs)))
+        B = np.zeros((self.order, len(inputs)))
         for index, input in enumerate(inputs):
             B[:, index] = input.steeringVector
 
@@ -173,28 +180,28 @@ class WienerFilter(object):
 
     def computeControlTrajectories(self, control):
         if control.type == 'analog switch':
-            self.Bf = np.zeros((self.system.order, self.system.order))
-            self.Bb = np.zeros((self.system.order, self.system.order))
-            for controlIndex in range(self.system.order):
+            self.Bf = np.zeros((self.order, self.order))
+            self.Bb = np.zeros((self.order, self.order))
+            for controlIndex in range(self.order):
                 def ForwardDerivative(x, t):
-                    hom = np.dot(self.tempAf, x.reshape((self.system.order,1))).flatten()
-                    control = np.zeros(self.system.order)
+                    hom = np.dot(self.tempAf, x.reshape((self.order,1))).flatten()
+                    control = np.zeros(self.order)
                     control[controlIndex] = 1
                     return hom + control
 
                 def BackwardDerivative(x, t):
-                    hom = - np.dot(self.tempAb, x.reshape((self.system.order,1))).flatten()
-                    control = np.zeros(self.system.order)
+                    hom = - np.dot(self.tempAb, x.reshape((self.order,1))).flatten()
+                    control = np.zeros(self.order)
                     control[controlIndex] = 1
                     return hom + control
 
                 # self.Bf = np.dot(self.system.zeroOrderHold(tempAf, Ts), self.system.B)
-                self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.system.order), np.array([0., self.Ts]))[-1,:]
+                self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
                 # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
-                self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.system.order), np.array([0., self.Ts]))[-1,:]
+                self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
 
-            self.Bf = np.dot(self.Bf, control.mixingMatrix)
-            self.Bb = np.dot(self.Bb, control.mixingMatrix)
+            self.Bf = np.dot(self.Bf, self.mixingMatrix)
+            self.Bb = np.dot(self.Bb, self.mixingMatrix)
         else:
             raise NotImplemented
 
@@ -202,15 +209,16 @@ class WienerFilter(object):
 
     def filter(self, control):
         """
-        This is the acctual filter operation. The controller needs to be a
+        This is the actual filter operation. The controller needs to be a
         Controller class instance from system.py.
         """
         # Compute Bf and Bb for this type of control
+        self.mixingMatrix = control.mixingMatrix
         self.computeControlTrajectories(control)
 
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)))
-        mf = np.zeros((self.system.order, control.size))
+        mf = np.zeros((self.order, control.size))
         mb = np.zeros_like(mf)
 
         for index in range(1, control.size):
@@ -221,6 +229,164 @@ class WienerFilter(object):
         return u
 
 
+
+class WienerFilterWithPostFiltering(WienerFilter):
+    """
+    This filter implements the automatic post filtering as described in Lukas
+    Bruderer's thesis, Theorem 5.4. The main idea is to expand the system model
+    as:
+
+    A = [[A_system, 0],[0,A_filter]]
+    B = [[B_system],[B_filter]]
+    C = [[C_system],[0]]
+
+    then instead of computing the system input
+
+    u_hat = - B(Vf + Vb)^(-1)(mf - mb)
+
+    we instead compute the output of the post filter which is a mapping from the
+    state estimate.
+
+    u_hat = C_filter^(T) (Wf + Wb)^(-1)(Wf mf + Wb mb)
+
+    To achive this we additionally make the following changes:
+    - Vf and Vb needs to be recomputed for the new larger system
+    - Af and Ab gets reparameterised as Af_new = Wf Af Vf and Ab_new = Wf Ab Vb
+    - w is computed as solve(Wf + Wb, C_filter)
+    - Bf and Bb are reparameterised as Bf_new = Wf Bf and Bb_new = Wb Bb
+    """
+
+    def __init__(self, t, system, inputs, postFilteringSystem, options={}):
+        """
+        Additonally to the init function in Wiener Filter a postFilteringSystem
+        needs to be provided. This postfilteringSystem must provide a MIMO filter
+        that has the same number of inputs as the the number of inputs to the
+        system.
+        """
+
+
+        self.Ts = t[1] - t[0]
+        self.system = system
+        self.inputs = inputs
+        self.postFilteringSystem = postFilteringSystem
+
+        if 'eta2' in options:
+            self.eta2 = options['eta2']
+        else:
+            self.eta2 = np.ones(self.system.order)
+            # self.eta2 = np.ones(self.system.order + self.postFilteringSystem.c.shape[1])
+
+        if 'sigmaU2' in options:
+            self.sigmaU2 = options['sigmaU2']
+        else:
+            self.sigmaU2 = np.ones(len(inputs))
+
+        # First check that there is one postfilter for each input
+        if len(inputs) != self.postFilteringSystem.b.shape[1]:
+            print("Not the same number of postfilters and inputs")
+            raise NotImplemented
+        # Combine system and postfilering into one system
+        Anew = scipy.linalg.block_diag(self.system.A, self.postFilteringSystem.A)
+
+        cnew = np.vstack((self.system.c, np.zeros((self.postFilteringSystem.c.shape[0], self.system.c.shape[1]))))
+        # cnew = np.hstack((cnew, np.concatenate((np.zeros(self.system.order), self.postFilteringSystem.c.flatten())).reshape((cnew.shape[0], 1))))
+        # print(cnew)
+
+        postFilterC = np.vstack((np.zeros((self.system.c.shape[0], self.postFilteringSystem.c.shape[1])), self.postFilteringSystem.c))
+        # bnew = np.vstack((np.zeros((self.system.order, self.postFilteringSystem.b.shape[1])), self.postFilteringSystem.b))
+
+        self.order = Anew.shape[1]
+
+
+        # Solve care
+        # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
+        A = Anew.transpose()
+        B = cnew
+        # Q = np.outer(bnew, bnew)
+        bSystemTemp = np.zeros((self.system.order, len(self.inputs)))
+        for index, input in enumerate(inputs):
+            bSystemTemp[:, index] = input.steeringVector * np.sqrt(self.sigmaU2[index])
+            # newb = np.hstack((input.steeringVector, self.postFilteringSystem.b))
+            # Q += self.sigmaU2[index] * np.outer(newb, newb)
+        newb = np.vstack((bSystemTemp, self.postFilteringSystem.b))
+        Q = np.outer(newb, newb)
+        R = np.diag(self.eta2)
+        Vf, Vb = care(A, B, Q, R)
+        Wf = np.linalg.inv(Vf)
+        Wb = np.linalg.inv(Vb)
+
+        print("Vf, Vb, Wf, Wb")
+        print(Vf)
+        print(Vb)
+        print(Wf)
+        print(Wb)
+        self.covariances = {
+        "Vf": Vf,
+        "Vb": Vb,
+        "Wf": Wf,
+        "Wb": Wb
+        }
+
+        if self.eta2.size < 2:
+            self.tempAf = (Anew - np.dot(Vf, np.dot(cnew, cnew.transpose())) / self.eta2)
+            self.tempAb = (Anew + np.dot(Vb, np.dot(cnew, cnew.transpose())) / self.eta2)
+        else:
+            eta2inv = np.linalg.inv(np.diag(self.eta2))
+            self.tempAf = (Anew - np.dot(Vf, np.dot(cnew, np.dot(eta2inv, cnew.transpose()))))
+            self.tempAb = (Anew + np.dot(Vb, np.dot(cnew, np.dot(eta2inv, cnew.transpose()))))
+
+        self.Af = np.dot(Wf, np.dot(scipy.linalg.expm(self.tempAf * self.Ts), Vf))
+
+        self.Ab = np.dot(Wb, np.dot(scipy.linalg.expm(-self.tempAb * self.Ts), Vb))
+
+        self.w = np.linalg.solve(Wf + Wb, postFilterC)
+
+
+        print("Afc")
+        print(self.tempAf)
+        print("Abc")
+        print(self.tempAb)
+        print("Af")
+        print(self.Af)
+        print("Ab")
+        print(self.Ab)
+        print("w")
+        print(self.w)
+
+
+    def filter(self, control):
+        """
+        This is the filtering operation. The only adjustment here is:
+        - redefine controlMixing matrix such that it follows the new sizes
+        - pre multiply Bf and Bb according to the simalirity transformation that
+        was previously applied to the state
+        - adjust the memory size of the mf and mb such that they accomondate the
+        new system size.
+        """
+        # Exand control mixing matrix
+        self.mixingMatrix = np.vstack((control.mixingMatrix, np.zeros((self.postFilteringSystem.A.shape[0], control.mixingMatrix.shape[1]))))
+        # Compute Bf and Bb for this type of control
+        self.computeControlTrajectories(control)
+        # Correct for the message passing variables Wf mf and Wb mb
+        self.Bf = np.dot(self.covariances["Wf"], self.Bf)
+        self.Bb = np.dot(self.covariances["Wb"], self.Bb)
+
+        # Initalise memory
+        u = np.zeros((control.size, len(self.inputs)))
+        mf = np.zeros((self.order, control.size))
+        mb = np.zeros_like(mf)
+
+        for index in range(1, control.size):
+            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1])
+            # print(mf[:, index])
+        for index in range(control.size - 2, 1, -1):
+            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index])
+            u[index] = np.dot(self.w.transpose(), mf[:, index] + mb[:, index])
+
+            # These are for debugging
+            # u[index] = np.dot(self.w.transpose(), mf[:, index] + 0 * mb[:, index])
+            # u[index] = np.dot(self.w.transpose(), 0 *mf[:, index] + mb[:, index])
+        return u
 
 # class WienerFilterWithObservations(WienerFilter):
 #     """ This is an attempt on integrating the known

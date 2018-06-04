@@ -78,7 +78,7 @@ u = input.scalarFunction(t)
 simulator = ADC.Simulator(model, control)
 filterSpec = {
     # 'eta2': 2.762478e+04 * np.eye(order),
-    'eta2': np.ones(order),
+    'eta2': np.ones(order)* 1e-4,
     # 'eta2': 2.453811e+02 * 2,
     'model': model,
     'Tc': Tc
@@ -113,7 +113,7 @@ plt.legend()
 
 
 u_hat = filter.filter(control)
-evaluation = ADC.Evaluation(model, u_hat, (input,))
+evaluation = ADC.Evaluation(model, u_hat, (input,), signalBand=[5., 5e2])
 
 # fig1 = evaluation.PlotTransferFunctions((1e-1, 15e3))
 fig2 = evaluation.PlotPowerSpectralDensity(t)

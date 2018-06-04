@@ -14,11 +14,12 @@ class Evaluation(object):
     - Least Square
     """
 
-    def __init__(self, system, estimates=[], references=[]):
+    def __init__(self, system, estimates=[], references=[], signalBand=[0., 1.]):
         self.system = system
         self.estimates = estimates
         self.references = references
         self.cmap = plt.get_cmap('jet_r')
+        self.signalBand = signalBand
 
 
     def AnalyticalTranferFunction(self, f, steeringVector):
@@ -77,6 +78,8 @@ class Evaluation(object):
         # freq = np.fft.fftfreq(inputSpec.shape[0], d=Ts)
 
         max, min = self.findMaxAndMean(inputSpec)
+        dnr = max/min
+        # dnr, max, min = self.DynamicRange(t, self.signalBand)
 
         max = (np.ones_like(freq) * max).flatten()
         min = (np.ones_like(freq) * min).flatten()
@@ -101,7 +104,7 @@ class Evaluation(object):
         ax[0].plot(freq, max, label="Signal Peak")
         ax[1].semilogx(freq, 10 * np.log10(max), label="Signal Peak")
 
-        diff = max[0]/min[0]
+        diff = dnr
 
         print(freq[freq.size/4], 0.01, "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
 
@@ -121,6 +124,39 @@ class Evaluation(object):
         mean = np.mean(array[5:indexMax[0] - offset, :], axis=0)
         mean = np.amax(array[5:indexMax[0] - offset, :], axis=0)
         return array[indexMax], mean
+
+    def DynamicRange(self, t, signalBand):
+        mask = 500
+        f_l = signalBand[0]
+        f_h = signalBand[1]
+        # N = (1 << 20)
+        N = (1 << 16)
+        # N = (1 << 8)
+        # N = t.size
+        Ts = t[1] - t[0]
+        freq, inputSpec = signal.welch(self.estimates[:,0], 1./Ts, nperseg = N)
+
+        table = freq < f_h
+        signalBand = inputSpec[table]
+        table = freq[table] > f_l
+        signalBand = signalBand[table]
+
+        maxIndex = np.argmax(signalBand)
+
+        signalDensity = signalBand[maxIndex]
+
+        notConverged = True
+        min = signalDensity
+
+        # while(notConverged):
+        #     if((signalDensity - min)
+
+        # Mask surronding pixels
+        signalBand[(maxIndex - mask/2): (maxIndex + mask/2)] = 0
+
+        noiseDensity = np.amax(signalBand)
+
+        return signalDensity/noiseDensity, signalDensity, noiseDensity
 
     def PlotTransferFunctions(self, freq):
         flin = np.linspace(freq[0], freq[1], NUMBER_OF_POINTS)
