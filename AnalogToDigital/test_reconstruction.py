@@ -136,7 +136,7 @@ def test_postFiltering():
     ctrl = system.Control(mixingMatrix, size)
 
     sim = simulator.Simulator(sys, ctrl)
-    t = np.linspace(0., 99., size)
+    t = np.linspace(0., Ts * (size - 1), size)
     res = sim.simulate(t, [inp])
     plt.figure()
     plt.plot(res['t'], res['output'])
@@ -184,7 +184,7 @@ def test_for_noise_simulation():
 
     ctrl = system.Control(mixingMatrix, size)
 
-    options = {'noise': {"standardDeviation": 1e-10}}
+    options = {'noise': {"standardDeviation": 1e-10 * np.ones(order)}}
 
     sim = simulator.Simulator(sys, ctrl, options=options)
     t = np.linspace(0., 99., size)
@@ -211,6 +211,6 @@ if __name__ == "__main__":
     test_for_constant_signal()
     test_for_first_order_filter_signal()
     test_for_sinusodial_signal()
-    test_postFiltering()
+    # test_postFiltering()
     test_for_noise_simulation()
     plt.show()
