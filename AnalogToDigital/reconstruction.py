@@ -3,6 +3,7 @@
 import numpy as np
 import scipy.linalg
 from topologiGenerator import SystemTransformations
+from system import Noise
 # from cvxopt import matrix, solvers
 # import copy
 from scipy.integrate import odeint
@@ -144,10 +145,20 @@ class WienerFilter(object):
         else:
             self.eta2 = np.ones(self.order)
 
+        if 'noise' in options:
+            std = options['noise']['standardDeviation']
+            for index in range(self.system.order):
+                vector = np.zeros(self.system.order, dtype=np.float)
+                vector[index] = std[index]
+                self.inputs.append(Noise(standardDeviation=1., steeringVector=vector, name="Thermal Noise in State %i" % (index)))
+
+
         if 'sigmaU2' in options:
             self.sigmaU2 = options['sigmaU2']
         else:
             self.sigmaU2 = np.ones(len(inputs))
+
+
 
         # Solve care
         # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
@@ -156,7 +167,10 @@ class WienerFilter(object):
         Q = np.zeros((self.order, self.order))
         for index, input in enumerate(inputs):
             Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
-        R = np.diag(self.eta2)
+        if self.eta2.size > 1:
+            R = np.diag(self.eta2)
+        else:
+            R = self.eta2.reshape((1,1))
         Vf, Vb = care(A, B, Q, R)
 
         if self.eta2.ndim < 2:
@@ -177,6 +191,9 @@ class WienerFilter(object):
 
         self.w = np.linalg.solve(Vf + Vb, B)
 
+
+    def __str__(self):
+        return "Af = \n%s\nBf = \n%s\nAb = \n%s\nBb = \n%s\nw = \n%s\n" % (self.Af, self.Bf, self.Ab, self.Bb, self.w)
 
     def computeControlTrajectories(self, control):
         if control.type == 'analog switch':

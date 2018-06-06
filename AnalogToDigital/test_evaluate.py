@@ -5,18 +5,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import evaluation
 import filters
-
+from scipy import signal
 
 def test_evaluate_PlotTransferFunctions():
     size = 10000
     order = 7
     Ts = 0.1
+    beta = 5.
     coef = np.random.rand(size) * 2. - 1.
     vector = np.zeros(order)
     vector[0] = 2.
     inp = system.FirstOrderHold(Ts, coefficients=coef, steeringVector=vector)
+    T = 40
+    t = 10 ** (T/10.)
+    rho = np.power(t, 1./order)/beta * np.sqrt(2)
 
-    A = 2 * np.eye(order, k=-1)
+    A = beta * np.eye(order, k=-1) - rho * np.eye(order, k=0)
     c = np.eye(order)
 
     sys = system.System(A, c)
@@ -185,7 +189,146 @@ def test_evaluate_PlotTransferFunctions_For_PostFiltering():
     # plt.plot(u_hat - u_hat2, label="diff")
     plt.legend()
 
+
+def test_evaluate_WithNoise():
+    size = 10000
+    order = 5
+    Ts = 0.0001
+    eta2 = 1e-4
+    beta = 1000.
+
+    noiseVariance = 1e-12
+
+    options = {
+        # 'noise': {"standardDeviation": np.sqrt(noiseVariance) * np.array([1./(order - x)**3 for x in range(order)])},
+        'noise': {"standardDeviation": np.sqrt(noiseVariance) * np.array([1. for x in range(order)])},
+        'eta2': eta2 * np.ones(order)
+    }
+    # options = {}
+
+    # options2 = {
+    #     # 'noise': {"standardDeviation": np.sqrt(noiseVariance) * np.array([1./(order - x)**3 for x in range(order)])},
+    #     'noise': {"standardDeviation": 1e-4 * np.array([1. for x in range(order)])},
+    #     'eta2': eta2 * np.ones(order)
+    # }
+    # options['noise']['standardDeviation'][5] = 1e-1
+
+    amplitude = 1. * 1e-6
+    frequency = 1e2 / (2. * np.pi)
+    phase = np.pi * 7. / 8.
+    vector = np.ones(order) * beta / 2.
+    # vector = np.zeros(order)
+    vector[0] = beta
+    inp = system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
+
+
+    # coef = np.random.rand(size) * 2. - 1.
+    # vector = np.zeros(order)
+    # vector[0] = beta
+    # inp = system.FirstOrderHold(Ts, coefficients=coef, steeringVector=vector)
+
+
+
+    # T = 120
+    # t = 10 ** (T/10.)
+    # rho = np.power(t, 1./order)/beta * np.sqrt(2)
+    rho = 0.
+
+    A = beta/2. * np.eye(order, k=-1) - rho * np.eye(order, k=0)
+    # A[0, :] =-np.ones(order) * beta/2.
+
+    print(A)
+    # A = 1e-2 * np.eye(order, k=-1) - rho * np.eye(order, k=0)
+    # A = np.zeros((order, order))
+    # A = np.random.randn(order, order)
+    # A = np.dot(A, np.linalg.inv(np.diag(np.sum(np.abs(A), axis=1))))
+    # print(A)
+
+    # A = 9. * np.eye(order, k=-1, dtype=np.float)
+    # make causal filter
+    # A +=  0. * np.eye(order, k=0)
+    c0 = np.zeros(order, dtype=np.float).reshape((order,1))
+    c0[-1] = 1.
+    c = np.eye(order, dtype=np.float)
+
+    sys0 = system.System(A, c0)
+    sys = system.System(A, c)
+
+    mixingMatrix = - 10.5 * np.eye(order)
+
+    ctrl = system.Control(mixingMatrix, size)
+    ctrl0 = system.Control(mixingMatrix, size)
+
+
+    sim0 = simulator.Simulator(sys0, ctrl0, options=options)
+    sim = simulator.Simulator(sys, ctrl, options=options)
+    t = np.linspace(0., Ts * (size - 1) , size)
+    u = inp.scalarFunction(t)
+    # res2 = sim0.simulate(t, (inp,))
+    res = sim.simulate(t, (inp,))
+    plt.figure()
+    plt.plot(res['t'], res['output'])
+    plt.legend(["%s" % x for x in range(order)])
+
+    # System 1
+    reconSISO = reconstruction.WienerFilter(t, sys0, (inp,), {"eta2":np.array(eta2)})
+    reconSIMO = reconstruction.WienerFilter(t, sys, (inp,), {"eta2":eta2 * np.ones(order)})
+    reconMIMO = reconstruction.WienerFilter(t, sys, [inp], options)
+
+    u_hatSISO = reconSISO.filter(ctrl)
+    u_hatSIMO = reconSIMO.filter(ctrl)
+    u_hatMIMO = reconMIMO.filter(ctrl)
+
+    print(reconSISO)
+
+
+    ev_SISO = evaluation.Evaluation(sys, u_hatSISO, (inp,))
+    ev_SIMO = evaluation.Evaluation(sys, u_hatSIMO, (inp,))
+    ev_MIMO = evaluation.Evaluation(sys, u_hatMIMO, (inp,))
+
+
+    freqsLim = [1e-2, 1e2]
+
+    freq, SISOSPECTRUM, SIGNALSPECTRUM = ev_SISO.PowerSpectralDensity(t)
+    _, SIMOSPECTRUM, _  = ev_SIMO.PowerSpectralDensity(t)
+    _, MIMOSPECTRUM, _  = ev_MIMO.PowerSpectralDensity(t)
+
+    plt.figure()
+    plt.semilogx(freq, 10 * np.log10(np.abs(SIGNALSPECTRUM.flatten())), label="u_hatSISO")
+    plt.semilogx(freq, 10 * np.log10(np.abs(SISOSPECTRUM.flatten())), label="u_hatSISO")
+    plt.semilogx(freq, 10 * np.log10(np.abs(SIMOSPECTRUM.flatten())), label="u_hatSIMO")
+    plt.semilogx(freq, 10 * np.log10(np.abs(MIMOSPECTRUM[:, 0].flatten())), label="u_hatMIMO")
+    plt.legend()
+
+
+    plt.figure()
+    plt.plot(u, label="u")
+    plt.plot(u_hatSISO, label="u_hatSISO")
+    plt.plot(u_hatSIMO, label="u_hatSIMO")
+    plt.plot(u_hatMIMO, label="u_hatMIMO")
+    plt.legend()
+
+    plt.figure()
+    plt.plot(u_hatSISO.flatten() - u.flatten(), label="u_hatSISO")
+    plt.plot(u_hatSIMO.flatten() - u.flatten(), label="u_hatSIMO")
+    plt.plot(u_hatMIMO[:,0] - u.flatten(), label="u_hatMIMO")
+    plt.legend()
+
+    plt.figure()
+    freq, u_hatSISOSP = signal.welch(u_hatSISO.flatten() - u.flatten(), 1./Ts)
+    _, u_hatSIMOSP = signal.welch(u_hatSIMO.flatten() - u.flatten(), 1./Ts)
+    _, u_hatMIMOSP = signal.welch(u_hatMIMO[:,0] - u.flatten(), 1./Ts)
+
+    plt.semilogx(freq, 10 * np.log10(np.abs(u_hatSISOSP)), label="u_hatSISO")
+    plt.semilogx(freq, 10 * np.log10(np.abs(u_hatSIMOSP)), label="u_hatSIMO")
+    plt.semilogx(freq, 10 * np.log10(np.abs(u_hatMIMOSP)), label="u_hatMIMO")
+    plt.legend()
+
+    figure1 = ev_SISO.PlotTransferFunctions(freqsLim)
+
+
 if __name__ == "__main__":
-    # test_evaluate_PlotTransferFunctions()
+    test_evaluate_PlotTransferFunctions()
     test_evaluate_PlotTransferFunctions_For_PostFiltering()
+    test_evaluate_WithNoise()
     plt.show()

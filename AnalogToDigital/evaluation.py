@@ -77,16 +77,17 @@ class Evaluation(object):
         freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
         # freq = np.fft.fftfreq(inputSpec.shape[0], d=Ts)
 
-        max, min = self.findMaxAndMean(inputSpec)
-        dnr = max/min
-        # dnr, max, min = self.DynamicRange(t, self.signalBand)
-
-        max = (np.ones_like(freq) * max).flatten()
-        min = (np.ones_like(freq) * min).flatten()
+        # max, min = self.findMaxAndMean(inputSpec)
+        # dnr = max/min
+        # # dnr, max, min = self.DynamicRange(t, self.signalBand)
+        #
+        # max = (np.ones_like(freq) * max).flatten()
+        # min = (np.ones_like(freq) * min).flatten()
 
         fig, ax = plt.subplots(nrows=2, ncols=1)
         index = 0
-        colors = self.cmap(np.arange(self.estimates.shape[1] + len(self.references))/(self.estimates.shape[1] + len(self.references)))
+        colors = self.cmap(np.arange(self.estimates.shape[1] + len(self.references))/np.float(self.estimates.shape[1] + len(self.references)))
+        print(np.arange(self.estimates.shape[1] + 1)/np.float(self.estimates.shape[1] + len(self.references)))
         for ref in self.references:
             tf_abs = np.abs(refSpec[index])
             ax[0].plot(freq, tf_abs, label=ref.name, c=colors[index])
@@ -94,22 +95,23 @@ class Evaluation(object):
             index += 1
 
         for inp in range(inputSpec.shape[1]):
+        # for inp in range(1):
             tf_abs = np.abs(inputSpec[:, inp])
             ax[0].plot(freq, tf_abs, label="Input %s" % inp, c=colors[index])
             ax[1].semilogx(freq, 10 * np.log10(tf_abs), label="Input %s" % inp, c=colors[index])
             index += 1
 
-        ax[0].plot(freq, min, label="Noise Floor")
-        ax[1].semilogx(freq, 10 * np.log10(min), label="Noise Floor")
-        ax[0].plot(freq, max, label="Signal Peak")
-        ax[1].semilogx(freq, 10 * np.log10(max), label="Signal Peak")
+        # ax[0].plot(freq, min, label="Noise Floor")
+        # ax[1].semilogx(freq, 10 * np.log10(min), label="Noise Floor")
+        # ax[0].plot(freq, max, label="Signal Peak")
+        # ax[1].semilogx(freq, 10 * np.log10(max), label="Signal Peak")
 
-        diff = dnr
-
-        print(freq[freq.size/4], 0.01, "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
-
-        ax[0].text(freq[freq.size/4], 0.01, "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
-        ax[1].text(np.log(freq[freq.size/4]), 10 * np.log10(0.01), "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
+        # diff = dnr
+        #
+        # print(freq[freq.size/4], 0.01, "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
+        #
+        # ax[0].text(freq[freq.size/4], 0.01, "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
+        # ax[1].text(np.log(freq[freq.size/4]), 10 * np.log10(0.01), "$\Delta = %0.1f$ dB" % (10 * np.log10(diff)))
 
         ax[0].legend()
         ax[0].set_xlabel("frequency")
@@ -117,6 +119,25 @@ class Evaluation(object):
         ax[1].set_xlabel("frequency")
         ax[1].set_ylabel("$V^2$/Hz [dB]")
         # ax[1].legend()
+
+    def PowerSpectralDensity(self, t):
+        # N = (1 << 20)
+        N = (1 << 16)
+        # N = (1 << 8)
+        # N = t.size
+        Ts = t[1] - t[0]
+        refSpec = [signal.welch(x.scalarFunction(t), 1./Ts, nperseg= N)[1] for x in self.references]
+        freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
+        # freq = np.fft.fftfreq(inputSpec.shape[0], d=Ts)
+
+        # max, min = self.findMaxAndMean(inputSpec)
+        # dnr = max/min
+        # # dnr, max, min = self.DynamicRange(t, self.signalBand)
+        #
+        # max = (np.ones_like(freq) * max).flatten()
+        # min = (np.ones_like(freq) * min).flatten()
+
+        return freq, inputSpec, refSpec[0]
 
     def findMaxAndMean(self, array):
         offset = 30

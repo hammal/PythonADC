@@ -1,4 +1,7 @@
-## Trigger build
+stages:
+  - test
+  - simulate
+
 image: continuumio/anaconda
 
 before_script:
@@ -7,7 +10,37 @@ before_script:
   - "mkdir -p /root/.config/matplotlib"
   - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
 
+testEvaluate:
+  stage: test
+  script:
+    - "cd AnalogToDigital"
+    - "python test_evaluate.py"
+
+testReconstruction:
+  stage: test
+  script:
+    - "cd AnalogToDigital"
+    - "python test_reconstruction.py"
+
+testSimulator:
+  stage: test
+  script:
+    - "cd AnalogToDigital"
+    - "python test_simulator.py"
+
+testSystem:
+  stage: test
+  script:
+    - "cd AnalogToDigital"
+    - "python test_system.py"
+
+testTopologiGenerator:
+  stage: test
+  script:
+    - "cd AnalogToDigital"
+    - "python test_topologiGenerator.py"
 gmCADC:
+  stage: simulate
   script:
     - "python gmCADC.py"
     - "python gmCADCMultipleObservations.py"

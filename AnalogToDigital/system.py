@@ -63,6 +63,22 @@ class Sin(Input):
     def scalarFunction(self, t):
         return self.amplitude * np.sin(2. * np.pi * self.frequency * t + self.phase)
 
+
+class Noise(Input):
+    """
+    Gaussian white noise
+    """
+    def __init__(self, standardDeviation, steeringVector, name="Noise"):
+        self.std = standardDeviation
+        self.steeringVector = steeringVector
+        self.name = name
+
+    def fun(self, t):
+        return self.steeringVector * self.scalarFunction(t)
+
+    def scalarFunction(self, t):
+        return  self.std * np.random.randn(1)
+
 class System(object):
 
     def __init__(self, A, c):

@@ -13,7 +13,7 @@ class Simulator(object):
     The Simulator is an object that is defined by a system, a control and can
     handle one or multiple inputs for simulating.
     """
-    def __init__(self, system, control=None, initalState=None,options=None):
+    def __init__(self, system, control=None, initalState=None,options={}):
         self.system = system
         self.control = control
 
@@ -38,6 +38,14 @@ class Simulator(object):
 
         t0 = t[0]
         index = 0
+        tnew = t
+
+        if 'jitter' in self.options:
+            jitter_range = self.options['jitter']['range']
+            if jitter_range > (self.t[1] - self.t[0])/2.:
+                raise "Too large jitter range. Time steps could change order"
+            tnew = t + (np.rand.rand(t.size) - 0.5) * jitter_range
+
         for timeInstance in t[1:]:
             # Store observations
             if outputDimension:
@@ -56,7 +64,16 @@ class Simulator(object):
                         input += signal.fun(timeInstance)
                 return hom + control + input
             # Solve ordinary differential equation
-            self.state = odeint(derivate, self.state, np.array([t0, timeInstance]))[-1, :]
+            self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=10000, rtol=1e-13)[-1, :]
+
+            # If thermal noise should be simulated
+            if "noise" in self.options:
+                def noiseDerivative(x, t):
+                    hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
+                    noise = np.random.randn(self.system.order) * self.options["noise"]["standardDeviation"]
+                    return hom + noise
+                noise_state = odeint(noiseDerivative, np.zeros_like(self.state), np.array([t0, timeInstance]))[-1, :]
+                self.state += noise_state
             # Increase time
             t0 = timeInstance
             # Update control descisions

@@ -137,7 +137,7 @@ def test_postFiltering():
 
     sim = simulator.Simulator(sys, ctrl)
     t = np.linspace(0., 99., size)
-    res = sim.simulate(t, (inp,))
+    res = sim.simulate(t, [inp])
     plt.figure()
     plt.plot(res['t'], res['output'])
     plt.legend(["%s" % x for x in range(order)])
@@ -150,7 +150,7 @@ def test_postFiltering():
     postFilterTF.butterWorth(2, (bandwith,))
     print(postFilterTF.a, postFilterTF.b)
     postFilter = filters.Filter()
-    postFilter.tf2lss(postFilterTF.b, postFilterTF.a)
+    postFilter.tf2lssObservableForm(postFilterTF.b, postFilterTF.a)
     print("Filter A = \n%s" % postFilter.A)
     print(postFilter.b)
     print(postFilter.c)
@@ -164,9 +164,53 @@ def test_postFiltering():
     plt.plot(t, u_hat, label="u_hat")
     plt.legend()
 
+def test_for_noise_simulation():
+    size = 1000
+    order = 10
+    Ts = 0.1
+    amplitude = 0.35
+    frequency = 1e-2
+    phase = np.pi * 7. / 8.
+    vector = np.zeros(order)
+    vector[0] = 1.
+    inp = system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
+
+    A = np.eye(order, k=-1)
+    c = np.eye(order)
+
+    sys = system.System(A, c)
+
+    mixingMatrix = - 1e0 * np.eye(order)
+
+    ctrl = system.Control(mixingMatrix, size)
+
+    options = {'noise': {"standardDeviation": 1e-10}}
+
+    sim = simulator.Simulator(sys, ctrl, options=options)
+    t = np.linspace(0., 99., size)
+    res = sim.simulate(t, [inp])
+    plt.figure()
+    plt.plot(res['t'], res['output'])
+    plt.legend(["%s" % x for x in range(order)])
+
+
+    recon = reconstruction.WienerFilter(t, sys, (inp,))
+    recon_with_noise = reconstruction.WienerFilter(t, sys, [inp], options=options)
+
+    u_hat = recon.filter(ctrl)
+    u_hat_with_noise = recon.filter(ctrl)
+
+    plt.figure()
+    plt.plot(t, inp.scalarFunction(t), label="u")
+    plt.plot(t, u_hat, label="u_hat")
+    plt.plot(t, u_hat_with_noise, label="u_hat_with_noise")
+    plt.legend()
+
+
 if __name__ == "__main__":
     test_for_constant_signal()
     test_for_first_order_filter_signal()
     test_for_sinusodial_signal()
     test_postFiltering()
+    test_for_noise_simulation()
     plt.show()
