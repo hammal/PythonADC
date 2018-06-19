@@ -8,6 +8,9 @@ class Input(object):
     hold filter
     """
 
+    def __str__(self):
+        return "Steering vector = %s, scalar function f(1.25) %s" % (self.steeringVector, self.scalarFunction(1.25))
+
     def __init__(self, Ts, coefficients, steeringVector, name="Zero Order Hold"):
         self.Ts = Ts
         self.u = coefficients
@@ -116,11 +119,15 @@ class Control(object):
     - The type
     which are all needed for reconstruction
     """
-    def __init__(self, mixingMatrix, size):
+    def __init__(self, mixingMatrix, size, memory=np.array([])):
         self.type = 'analog switch'
         # The internal memory
         self.mixingMatrix = mixingMatrix
-        self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int8)
+        # Check if passed memory
+        if memory.shape[0] == size:
+            self.memory = memory
+        else:
+            self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int8)
         self.size = size
         self.memory_Pointer = 0
 

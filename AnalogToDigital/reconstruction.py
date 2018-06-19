@@ -13,11 +13,11 @@ def care(A, B, Q, R):
     """
     This function solves the forward and backward continuous Riccati equation.
     """
-    print("Solve CARE for:")
-    print(A)
-    print(B)
-    print(Q)
-    print(R)
+    # print("Solve CARE for:")
+    # print(A)
+    # print(B)
+    # print(Q)
+    # print(R)
     Vf = scipy.linalg.solve_continuous_are(A, B, Q, R)
     Vb = scipy.linalg.solve_continuous_are(-A, B, Q, R)
     # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
@@ -139,6 +139,7 @@ class WienerFilter(object):
         self.system = system
         self.inputs = inputs
         self.order = self.system.order
+        self.noise = []
 
         if 'eta2' in options:
             self.eta2 = options['eta2']
@@ -146,11 +147,8 @@ class WienerFilter(object):
             self.eta2 = np.ones(self.order)
 
         if 'noise' in options:
-            std = options['noise']['standardDeviation']
-            for index in range(self.system.order):
-                vector = np.zeros(self.system.order, dtype=np.float)
-                vector[index] = std[index]
-                self.inputs.append(Noise(standardDeviation=1., steeringVector=vector, name="Thermal Noise in State %i" % (index)))
+            for source in options['noise']:
+                self.noise.append(Noise(standardDeviation=source['std'], steeringVector=source['steeringVector'], name=source["name"]))
 
 
         if 'sigmaU2' in options:
@@ -167,11 +165,18 @@ class WienerFilter(object):
         Q = np.zeros((self.order, self.order))
         for index, input in enumerate(inputs):
             Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
+
+        print("Q before ", Q)
+        for noiseSource in self.noise:
+            Q += (noiseSource.std) ** 2 * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
+        print("Q after ", Q)
         if self.eta2.size > 1:
             R = np.diag(self.eta2)
         else:
             R = self.eta2.reshape((1,1))
+        # print(A,B,Q,R)
         Vf, Vb = care(A, B, Q, R)
+        print("Vf, Vb\n",Vf + Vb)
 
         if self.eta2.ndim < 2:
             self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
@@ -404,6 +409,158 @@ class WienerFilterWithPostFiltering(WienerFilter):
             # u[index] = np.dot(self.w.transpose(), mf[:, index] + 0 * mb[:, index])
             # u[index] = np.dot(self.w.transpose(), 0 *mf[:, index] + mb[:, index])
         return u
+
+
+class DiscreteTimeKalmanFilter(object):
+    """
+    This is the Kalman filter approach to the reconstruction problem where
+    Covariance is not assumed fixed and control sequences are treated as both
+    observations and input.
+    """
+    def __init__(self, t, system, inputs, options={}):
+        """
+        This constructor requries:
+        - t which are the times to reconstruct at (assumed to be uniformly spaced)
+        - a system model
+        - inputs an iterable of inputs to be estimated
+        - options
+        """
+        self.Ts = t[1] - t[0]
+        self.system = system
+        self.inputs = inputs
+        self.order = self.system.order
+        self.noise = []
+
+        if 'eta2' in options:
+            self.eta2 = options['eta2']
+        else:
+            self.eta2 = np.ones(self.order)
+
+        if 'noise' in options:
+            for source in options['noise']:
+                self.noise.append(Noise(standardDeviation=source['std'], steeringVector=source['steeringVector'], name=source["name"]))
+
+
+        if 'sigmaU2' in options:
+            self.sigmaU2 = options['sigmaU2']
+        else:
+            self.sigmaU2 = np.ones(len(inputs))
+
+
+    def discretize(self, b, deltaT):
+        Ad = scipy.linalg.expm(self.system.A * deltaT)
+        def derivative(x, t):
+            Ad = scipy.linalg.expm(self.system.A * t)
+            return np.dot(Ad, np.dot(b, np.dot(b.transpose(), Ad.transpose()))).flatten()
+        Vinp = odeint(derivative, np.zeros(self.system.size), np.array([0., deltaT]))[-1,:].reshape(self.system.A.shape)
+        
+
+        # # Solve care
+        # # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
+        # A = self.system.A.transpose()
+        # B = self.system.c
+        # Q = np.zeros((self.order, self.order))
+        # for index, input in enumerate(inputs):
+        #     Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
+        #
+        # print("Q before ", Q)
+        # for noiseSource in self.noise:
+        #     Q += (noiseSource.std) ** 2 * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
+        # print("Q after ", Q)
+        # if self.eta2.size > 1:
+        #     R = np.diag(self.eta2)
+        # else:
+        #     R = self.eta2.reshape((1,1))
+        # # print(A,B,Q,R)
+        # Vf, Vb = care(A, B, Q, R)
+        # print("Vf, Vb\n",Vf + Vb)
+        #
+        # if self.eta2.ndim < 2:
+        #     self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
+        #     self.tempAb = (self.system.A + np.dot(Vb, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
+        # else:
+        #     eta2inv = np.linalg.inv(np.diag(self.eta2))
+        #     self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, np.dot(eta2inv, self.system.c.transpose()))))
+        #     self.tempAb = (self.system.A + np.dot(Vb, np.dot(self.system.c, np.dot(eta2inv, self.system.c.transpose()))))
+        #
+        # self.Af = scipy.linalg.expm(self.tempAf * self.Ts)
+        #
+        # self.Ab = scipy.linalg.expm(-self.tempAb * self.Ts)
+        #
+        # B = np.zeros((self.order, len(inputs)))
+        # for index, input in enumerate(inputs):
+        #     B[:, index] = input.steeringVector
+        #
+        # self.w = np.linalg.solve(Vf + Vb, B)
+
+
+    def __str__(self):
+        return "Af = \n%s\nBf = \n%s\nAb = \n%s\nBb = \n%s\nw = \n%s\n" % (self.Af, self.Bf, self.Ab, self.Bb, self.w)
+
+    def computeControlTrajectories(self, control):
+        if control.type == 'analog switch':
+            self.Bf = np.zeros((self.order, self.order))
+            self.Bb = np.zeros((self.order, self.order))
+            for controlIndex in range(self.order):
+                def ForwardDerivative(x, t):
+                    hom = np.dot(self.tempAf, x.reshape((self.order,1))).flatten()
+                    control = np.zeros(self.order)
+                    control[controlIndex] = 1
+                    return hom + control
+
+                def BackwardDerivative(x, t):
+                    hom = - np.dot(self.tempAb, x.reshape((self.order,1))).flatten()
+                    control = np.zeros(self.order)
+                    control[controlIndex] = 1
+                    return hom + control
+
+                # self.Bf = np.dot(self.system.zeroOrderHold(tempAf, Ts), self.system.B)
+                self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
+                # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
+                self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
+
+            self.Bf = np.dot(self.Bf, self.mixingMatrix)
+            self.Bb = np.dot(self.Bb, self.mixingMatrix)
+        else:
+            raise NotImplemented
+
+
+
+    def filter(self, control):
+        """
+        This is the actual filter operation. The controller needs to be a
+        Controller class instance from system.py.
+        """
+        # Compute Bf and Bb for this type of control
+        self.mixingMatrix = control.mixingMatrix
+        self.computeControlTrajectories(control)
+
+        # Initalise memory
+        u = np.zeros((control.size, len(self.inputs)))
+        mf = np.zeros((self.order, control.size))
+        mb = np.zeros_like(mf)
+
+        for index in range(1, control.size):
+            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1])
+        for index in range(control.size - 2, 1, -1):
+            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index])
+            u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
+        return u
+
+class Calibration(object):
+    """
+    This calibration rutine estimates the parameters of an ADC
+    """
+
+    def __init__(self, system):
+        self.system = system
+
+    def calibrate(self, control, inputs):
+        pass
+
+    def costFunction(self, theta):
+        pass
+
 
 # class WienerFilterWithObservations(WienerFilter):
 #     """ This is an attempt on integrating the known

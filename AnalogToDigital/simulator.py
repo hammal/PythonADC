@@ -42,11 +42,14 @@ class Simulator(object):
 
         if 'jitter' in self.options:
             jitter_range = self.options['jitter']['range']
-            if jitter_range > (self.t[1] - self.t[0])/2.:
+            if jitter_range > (t[1] - t[0])/2.:
                 raise "Too large jitter range. Time steps could change order"
-            tnew = t + (np.rand.rand(t.size) - 0.5) * jitter_range
+            tnew = t + (np.random.rand(t.size) - 0.5) * jitter_range
+            print("Jitter!")
+            print(t)
+            print(tnew)
 
-        for timeInstance in t[1:]:
+        for timeInstance in tnew[1:]:
             # Store observations
             if outputDimension:
                 output[index, :] = self.system.output(self.state)
@@ -62,18 +65,37 @@ class Simulator(object):
                 if inputs:
                     for signal in inputs:
                         input += signal.fun(timeInstance)
+                        # print("Input = %s" % signal.fun(timeInstance))
                 return hom + control + input
             # Solve ordinary differential equation
             self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=10000, rtol=1e-13)[-1, :]
 
             # If thermal noise should be simulated
             if "noise" in self.options:
-                def noiseDerivative(x, t):
-                    hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
-                    noise = np.random.randn(self.system.order) * self.options["noise"]["standardDeviation"]
-                    return hom + noise
-                noise_state = odeint(noiseDerivative, np.zeros_like(self.state), np.array([t0, timeInstance]))[-1, :]
+
+                # Shock Noise
+                noise_state = np.zeros(self.system.order)
+                for noiseSource in self.options['noise']:
+                    if noiseSource['std'] > 0:
+                        std = np.sqrt(noiseSource["std"]**2 * (timeInstance - t0)) * noiseSource["steeringVector"]
+                        noise_state += np.random.randn() * std
                 self.state += noise_state
+
+
+                # # Thermal Noise Simulation
+                # for noiseSource in self.options['noise']:
+                #     if noiseSource['std'] > 0:
+                #         def noiseDerivative(x, t):
+                #             hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
+                #             noise = np.random.randn() * noiseSource["std"] * noiseSource["steeringVector"]
+                #             return hom + noise
+                #         noise_state = odeint(noiseDerivative, np.zeros_like(self.state), np.array([t0, timeInstance]))[-1, :]
+                #         # print("Noise state %s" %noise_state)
+                #         # print("state before ", self.state)
+                #         self.state += noise_state
+                #         # print("noise ", noise_state)
+                #         # print("state after ", self.state)
+
             # Increase time
             t0 = timeInstance
             # Update control descisions

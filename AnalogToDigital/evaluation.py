@@ -21,6 +21,9 @@ class Evaluation(object):
         self.cmap = plt.get_cmap('jet_r')
         self.signalBand = signalBand
 
+    def ExpectedSNRForEquivalentIntegratorChain(self,OSR):
+        return 1 * 6.02 + 1.76 + 10 * np.log10(2 * self.system.order + 1) - 20 * self.system.order * np.log10(np.pi) + 10 * (2 * self.system.order + 1) * np.log10(OSR)
+
 
     def AnalyticalTranferFunction(self, f, steeringVector):
         """
@@ -39,8 +42,8 @@ class Evaluation(object):
 
     def PlotFFT(self, t):
         # N = (1 << 20)
-        # N = (1 << 8)
-        N = t.size
+        N = (1 << 8)
+        # N = t.size
         Ts = t[1] - t[0]
         refSpec = [np.fft.fft(x.scalarFunction(t), n = N) for x in self.references]
         inputSpec = np.fft.fft(self.estimates, axis=0, n = N)
@@ -69,9 +72,9 @@ class Evaluation(object):
 
     def PlotPowerSpectralDensity(self, t):
         # N = (1 << 20)
-        N = (1 << 16)
-        # N = (1 << 8)
-        # N = t.size
+        # N = (1 << 16)
+        N = (1 << 8)
+        # N = t.size 
         Ts = t[1] - t[0]
         refSpec = [signal.welch(x.scalarFunction(t), 1./Ts, nperseg= N)[1] for x in self.references]
         freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
