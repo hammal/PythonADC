@@ -446,81 +446,36 @@ class DiscreteTimeKalmanFilter(object):
         else:
             self.sigmaU2 = np.ones(len(inputs))
 
+        self.Vb, self.Ad = self.discretize(self.inputs[0].steeringVector, self.Ts)
+
+
 
     def discretize(self, b, deltaT):
         Ad = scipy.linalg.expm(self.system.A * deltaT)
         def derivative(x, t):
             Ad = scipy.linalg.expm(self.system.A * t)
             return np.dot(Ad, np.dot(b, np.dot(b.transpose(), Ad.transpose()))).flatten()
-        Vinp = odeint(derivative, np.zeros(self.system.size), np.array([0., deltaT]))[-1,:].reshape(self.system.A.shape)
-        
-
-        # # Solve care
-        # # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
-        # A = self.system.A.transpose()
-        # B = self.system.c
-        # Q = np.zeros((self.order, self.order))
-        # for index, input in enumerate(inputs):
-        #     Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
-        #
-        # print("Q before ", Q)
-        # for noiseSource in self.noise:
-        #     Q += (noiseSource.std) ** 2 * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
-        # print("Q after ", Q)
-        # if self.eta2.size > 1:
-        #     R = np.diag(self.eta2)
-        # else:
-        #     R = self.eta2.reshape((1,1))
-        # # print(A,B,Q,R)
-        # Vf, Vb = care(A, B, Q, R)
-        # print("Vf, Vb\n",Vf + Vb)
-        #
-        # if self.eta2.ndim < 2:
-        #     self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
-        #     self.tempAb = (self.system.A + np.dot(Vb, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
-        # else:
-        #     eta2inv = np.linalg.inv(np.diag(self.eta2))
-        #     self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, np.dot(eta2inv, self.system.c.transpose()))))
-        #     self.tempAb = (self.system.A + np.dot(Vb, np.dot(self.system.c, np.dot(eta2inv, self.system.c.transpose()))))
-        #
-        # self.Af = scipy.linalg.expm(self.tempAf * self.Ts)
-        #
-        # self.Ab = scipy.linalg.expm(-self.tempAb * self.Ts)
-        #
-        # B = np.zeros((self.order, len(inputs)))
-        # for index, input in enumerate(inputs):
-        #     B[:, index] = input.steeringVector
-        #
-        # self.w = np.linalg.solve(Vf + Vb, B)
+        Vinp = odeint(derivative, np.zeros(self.system.order ** 2), np.array([0., deltaT]))[-1,:].reshape(self.system.A.shape)
+        return Vinp, Ad
 
 
     def __str__(self):
-        return "Af = \n%s\nBf = \n%s\nAb = \n%s\nBb = \n%s\nw = \n%s\n" % (self.Af, self.Bf, self.Ab, self.Bb, self.w)
+        return "Ad = \n%s\nBf = \n%s\n" % (self.Af, self.Bf)
 
     def computeControlTrajectories(self, control):
         if control.type == 'analog switch':
             self.Bf = np.zeros((self.order, self.order))
-            self.Bb = np.zeros((self.order, self.order))
             for controlIndex in range(self.order):
                 def ForwardDerivative(x, t):
-                    hom = np.dot(self.tempAf, x.reshape((self.order,1))).flatten()
+                    hom = np.dot(self.system.A, x.reshape((self.order,1))).flatten()
                     control = np.zeros(self.order)
                     control[controlIndex] = 1
                     return hom + control
 
-                def BackwardDerivative(x, t):
-                    hom = - np.dot(self.tempAb, x.reshape((self.order,1))).flatten()
-                    control = np.zeros(self.order)
-                    control[controlIndex] = 1
-                    return hom + control
-
-                # self.Bf = np.dot(self.system.zeroOrderHold(tempAf, Ts), self.system.B)
                 self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
-                # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
-                self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
 
             self.Bf = np.dot(self.Bf, self.mixingMatrix)
-            self.Bb = np.dot(self.Bb, self.mixingMatrix)
+            self.w = self.inputs[0].steeringVector.transpose() * self.sigmaU2
         else:
             raise NotImplemented
 
@@ -535,16 +490,31 @@ class DiscreteTimeKalmanFilter(object):
         self.mixingMatrix = control.mixingMatrix
         self.computeControlTrajectories(control)
 
+        outputGain = 1.
+
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)))
         mf = np.zeros((self.order, control.size))
-        mb = np.zeros_like(mf)
+        Vf = [np.eye(self.order) * 1e15] * control.size
+        G = [np.eye(self.system.outputOrder)] * control.size
+        F = [np.zeros((self.order, self.order))]* control.size
+        xi = np.zeros_like(mf)
+        W_tilde = [np.zeros((self.order, self.order))] * control.size
+        observation = [np.zeros(self.system.outputOrder)] * control.size
+        for index in range(control.size):
+            observation[index] = outputGain * control[index]
 
         for index in range(1, control.size):
-            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1])
+            G[index - 1] = np.linalg.inv(self.eta2 * self.sigmaU2 * np.eye(self.system.outputOrder)  + np.dot(self.system.c.transpose(), np.dot(Vf[index - 1], self.system.c)))
+            F[index - 1] = np.eye(self.order) - np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], self.system.c.transpose())))
+            Vf[index] = np.dot(self.Ad, np.dot(F[index - 1], np.dot(Vf[index - 1], self.Ad.transpose()))) + self.Vb
+            print(np.dot(self.Ad, np.dot(F[index - 1], mf[:, index - 1]) + np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], observation[index - 1])))))
+            mf[:, index] = np.dot(self.Ad, np.dot(F[index - 1], mf[:, index - 1]) + np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], observation[index - 1])))) + np.dot(self.Bf, control[index])
         for index in range(control.size - 2, 1, -1):
-            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index])
-            u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
+            temp = np.dot(F[index].transpose(),self.Ad.transpose())
+            W_tilde[index] = np.dot(temp, np.dot(W_tilde[index + 1], temp.transpose())) + np.dot(self.system.c, np.dot(G[index], self.system.c.transpose()))
+            xi[:, index] = np.dot(temp, xi[:, index + 1]) + np.dot(self.system.c, np.dot(G[index], np.dot(self.system.c.transpose(), mf[:, index]) - observation[index]))
+            u[index] = np.dot(self.w, xi[:, index])
         return u
 
 class Calibration(object):
