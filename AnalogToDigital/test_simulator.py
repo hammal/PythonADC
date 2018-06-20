@@ -65,6 +65,7 @@ def test_integratorChain():
 def test_noisy_integratorChain():
     size = 1000
     Ts = 0.1
+    order = 3
     coef = np.ones(size)
     vector = np.array([1., 0, 0])
     inp = system.Input(Ts, coefficients=coef, steeringVector=vector)
@@ -72,7 +73,24 @@ def test_noisy_integratorChain():
     A = np.eye(3, k=-1)
     c = np.eye(3)
 
-    noise = {"standardDeviation": 1e-4}
+    noiseVariance = np.ones(3) * 1e-4
+    noiseSources = []
+    for index in range(order):
+        if noiseVariance[index]>0:
+            vector = np.zeros(order)
+            vector[index] = 1
+            noiseSources.append(
+            {
+                "std": np.sqrt(noiseVariance[index]),
+                "steeringVector": vector,
+                "name": "Noise Source %s" % index
+            }
+            )
+
+
+    options = {
+        'noise': noiseSources
+    }
 
     sys = system.System(A, c)
 
@@ -80,7 +98,7 @@ def test_noisy_integratorChain():
 
     ctrl = system.Control(mixingMatrix, size)
 
-    sim = simulator.Simulator(sys, ctrl, options={"noise": noise})
+    sim = simulator.Simulator(sys, ctrl, options=options)
     t = np.linspace(0., 99., size)
     res = sim.simulate(t, (inp,))
     plt.figure()

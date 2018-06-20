@@ -197,13 +197,27 @@ def test_evaluate_WithNoise():
     eta2 = 1e-4
     beta = 1000.
 
-    noiseVariance = 1e-12
+
+    noiseVariance = np.ones(order) * 1e-12
+    noiseSources = []
+    for index in range(order):
+        if noiseVariance[index]>0:
+            vector = np.zeros(order)
+            vector[index] = beta
+            noiseSources.append(
+            {
+                "std": np.sqrt(noiseVariance[index]),
+                "steeringVector": vector,
+                "name": "Noise Source %s" % index
+            }
+            )
+
 
     options = {
-        # 'noise': {"standardDeviation": np.sqrt(noiseVariance) * np.array([1./(order - x)**3 for x in range(order)])},
-        'noise': {"standardDeviation": np.sqrt(noiseVariance) * np.array([1. for x in range(order)])},
+        'noise': noiseSources,
         'eta2': eta2 * np.ones(order)
     }
+
     # options = {}
 
     # options2 = {

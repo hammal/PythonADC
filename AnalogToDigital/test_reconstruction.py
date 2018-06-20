@@ -184,7 +184,24 @@ def test_for_noise_simulation():
 
     ctrl = system.Control(mixingMatrix, size)
 
-    options = {'noise': {"standardDeviation": 1e-10 * np.ones(order)}}
+    noiseVariance = np.ones(order) * 1e-4
+    noiseSources = []
+    for index in range(order):
+        if noiseVariance[index]>0:
+            vector = np.zeros(order)
+            vector[index] = 1
+            noiseSources.append(
+            {
+                "std": np.sqrt(noiseVariance[index]),
+                "steeringVector": vector,
+                "name": "Noise Source %s" % index
+            }
+            )
+
+
+    options = {
+        'noise': noiseSources
+    }
 
     sim = simulator.Simulator(sys, ctrl, options=options)
     t = np.linspace(0., 99., size)
