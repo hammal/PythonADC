@@ -42,9 +42,10 @@ testTopologiGenerator:
 gmCADC:
   stage: simulate
   script:
+    - "cd Examples"
     - "python gmCADC.py"
-    - "python gmCADCMultipleObservations.py"
-    - "python gmCADCObservations.py"
+    # - "python gmCADCMultipleObservations.py"
+    # - "python gmCADCObservations.py"
     # - "python gmCADCParallel.py 1 10 1"
     # - "python gmCADCParallelCompensatedGain.py 1 10 1"
     # - "python gmCADCParallelNumberComparisson.py 1 10 1"

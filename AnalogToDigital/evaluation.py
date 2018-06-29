@@ -74,7 +74,7 @@ class Evaluation(object):
         # N = (1 << 20)
         # N = (1 << 16)
         N = (1 << 8)
-        # N = t.size 
+        # N = t.size
         Ts = t[1] - t[0]
         refSpec = [signal.welch(x.scalarFunction(t), 1./Ts, nperseg= N)[1] for x in self.references]
         freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
@@ -127,7 +127,7 @@ class Evaluation(object):
         # N = (1 << 20)
         N = (1 << 16)
         # N = (1 << 8)
-        # N = t.size
+        N = t.size / 4
         Ts = t[1] - t[0]
         refSpec = [signal.welch(x.scalarFunction(t), 1./Ts, nperseg= N)[1] for x in self.references]
         freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
