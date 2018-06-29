@@ -13,27 +13,27 @@ before_script:
 testEvaluate:
   stage: test
   script:
-    - "python -m AnalogToDigital.test.test_evaluate.py"
+    - "python -m AnalogToDigital.test.test_evaluate"
 
 testReconstruction:
   stage: test
   script:
-    - "python -m AnalogToDigital.test.test_reconstruction.py"
+    - "python -m AnalogToDigital.test.test_reconstruction"
 
 testSimulator:
   stage: test
   script:
-    - "python -m AnalogToDigital.test.test_simulator.py"
+    - "python -m AnalogToDigital.test.test_simulator"
 
 testSystem:
   stage: test
   script:
-    - "python -m AnalogToDigital.test.test_system.py"
+    - "python -m AnalogToDigital.test.test_system"
 
 testTopologiGenerator:
   stage: test
   script:
-        - "python -m AnalogToDigital.test.test_topologiGenerator.py"
+        - "python -m AnalogToDigital.test.test_topologiGenerator"
 
 gmCADC:
   stage: simulate
