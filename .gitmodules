@@ -1,0 +1,3 @@
+[submodule "AnalogToDigital/python-deltasigma"]
+	path = AnalogToDigital/python-deltasigma
+	url = https://github.com/ggventurini/python-deltasigma.git
