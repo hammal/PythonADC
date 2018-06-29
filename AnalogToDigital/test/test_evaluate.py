@@ -1,10 +1,10 @@
-import system
-import simulator
-import reconstruction
+import AnalogToDigital.system as system
+import AnalogToDigital.simulator as simulator
+import AnalogToDigital.reconstruction as reconstruction
 import numpy as np
 import matplotlib.pyplot as plt
-import evaluation
-import filters
+import AnalogToDigital.evaluation as evaluation
+import AnalogToDigital.filters as filters
 from scipy import signal
 
 def test_evaluate_PlotTransferFunctions():

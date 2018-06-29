@@ -1,5 +1,5 @@
 import numpy as np
-import topologiGenerator
+import AnalogToDigital.topologiGenerator as topologiGenerator
 np.set_printoptions(precision=2)
 
 n = 5

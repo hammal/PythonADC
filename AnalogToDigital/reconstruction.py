@@ -2,8 +2,8 @@
 
 import numpy as np
 import scipy.linalg
-from .topologiGenerator import SystemTransformations
-from .system import Noise
+from AnalogToDigital.topologiGenerator import SystemTransformations
+from AnalogToDigital.system import Noise
 # from cvxopt import matrix, solvers
 # import copy
 from scipy.integrate import odeint

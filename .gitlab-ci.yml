@@ -13,41 +13,33 @@ before_script:
 testEvaluate:
   stage: test
   script:
-    - "cd AnalogToDigital"
-    - "python test_evaluate.py"
+    - "python -m AnalogToDigital.test.test_evaluate.py"
 
 testReconstruction:
   stage: test
   script:
-    - "cd AnalogToDigital"
-    - "python test_reconstruction.py"
+    - "python -m AnalogToDigital.test.test_reconstruction.py"
 
 testSimulator:
   stage: test
   script:
-    - "cd AnalogToDigital"
-    - "python test_simulator.py"
+    - "python -m AnalogToDigital.test.test_simulator.py"
 
 testSystem:
   stage: test
   script:
-    - "cd AnalogToDigital"
-    - "python test_system.py"
+    - "python -m AnalogToDigital.test.test_system.py"
 
 testTopologiGenerator:
   stage: test
   script:
-    - "cd AnalogToDigital"
-    - "python test_topologiGenerator.py"
+        - "python -m AnalogToDigital.test.test_topologiGenerator.py"
+
 gmCADC:
   stage: simulate
   script:
-    - "cd Examples"
-    - "ls"
-    - "ls AnalogToDigital"
-    - "python gmCADC.py"
-    # - "python gmCADCMultipleObservations.py"
-    # - "python gmCADCObservations.py"
+    - "python Examples/gmCADC.py"
+    - "python Examples/gmCADCMultipleObservations.py"
     # - "python gmCADCParallel.py 1 10 1"
     # - "python gmCADCParallelCompensatedGain.py 1 10 1"
     # - "python gmCADCParallelNumberComparisson.py 1 10 1"

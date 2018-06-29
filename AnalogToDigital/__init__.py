@@ -2,17 +2,17 @@
 converter"""
 
 # from .reconstruction import LeastMeanSquare
-from .reconstruction import WienerFilter
+from AnalogToDigital.reconstruction import WienerFilter
 # from .reconstruction import WienerFilterAutomaticSystem
 # from .reconstruction import WienerFilterWithObservations
 # from .reconstruction import SigmaDeltaApproach
-from .simulator import Simulator
-from .system import System, Control, Input, FirstOrderHold, Sin
+from AnalogToDigital.simulator import Simulator
+from AnalogToDigital.system import System, Control, Input, FirstOrderHold, Sin
 # from .topologiGenerator import Topology
-from .defaultSystems import DefaultSystems
-from .evaluation import Evaluation
-import system
-import simulator
-import reconstruction
-import evaluation
-import filters
+from AnalogToDigital.defaultSystems import DefaultSystems
+from AnalogToDigital.evaluation import Evaluation
+import AnalogToDigital.system as system
+import AnalogToDigital.simulator as simulator
+import AnalogToDigital.reconstruction as reconstruction
+import AnalogToDigital.evaluation as evalutation
+import AnalogToDigital.filters as filters

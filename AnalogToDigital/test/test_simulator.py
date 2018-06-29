@@ -1,5 +1,5 @@
-import system
-import simulator
+import AnalogToDigital.system as system
+import AnalogToDigital.simulator as simulator
 import numpy as np
 import matplotlib.pyplot as plt
 

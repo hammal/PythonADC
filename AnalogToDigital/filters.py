@@ -3,7 +3,7 @@ This file implements various standard filters and useful utilitiy functions
 """
 import numpy as np
 from scipy import signal
-from .topologiGenerator import SystemTransformations
+from AnalogToDigital.topologiGenerator import SystemTransformations
 
 class TransferFunction(object):
     """

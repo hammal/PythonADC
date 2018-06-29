@@ -1,9 +1,9 @@
-import system
-import simulator
-import reconstruction
+import AnalogToDigital.system as system
+import AnalogToDigital.simulator as simulator
+import AnalogToDigital.reconstruction as reconstruction
 import numpy as np
 import matplotlib.pyplot as plt
-import filters
+import AnalogToDigital.filters as filters
 
 
 def test_for_constant_signal():

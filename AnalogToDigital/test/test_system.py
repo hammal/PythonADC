@@ -1,4 +1,4 @@
-import system
+import AnalogToDigital.system as system
 import numpy as np
 
 def testInputs():

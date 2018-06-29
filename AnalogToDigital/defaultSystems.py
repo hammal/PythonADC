@@ -1,5 +1,5 @@
 import numpy as np
-from .system import System
+from AnalogToDigital.system import System
 
 class DefaultSystems(object):
     """
