@@ -43,6 +43,8 @@ gmCADC:
   stage: simulate
   script:
     - "cd Examples"
+    - "ls"
+    - "ls AnalogToDigital"
     - "python gmCADC.py"
     # - "python gmCADCMultipleObservations.py"
     # - "python gmCADCObservations.py"
