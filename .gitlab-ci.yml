@@ -37,10 +37,11 @@ testTopologiGenerator:
 
 testDeltaSigma:
   before_script:
-    - "git clone https://github.com/ggventurini/python-deltasigma.git"
-    - "cd python-deltasigma"
-    - "python setup.py install"
-    - "cd .."
+    # - "git clone https://github.com/ggventurini/python-deltasigma.git"
+    # - "cd python-deltasigma"
+    # - "python setup.py install"
+    # - "cd .."
+    - "pip install deltasigma"
     - "mkdir -p /root/.config/matplotlib"
     - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
   stage: test
