@@ -41,6 +41,7 @@ testDeltaSigma:
     # - "cd python-deltasigma"
     # - "python setup.py install"
     # - "cd .."
+    - "apt-get install -y libopenblas-dev gfortran"
     - "pip install deltasigma"
     - "mkdir -p /root/.config/matplotlib"
     - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
