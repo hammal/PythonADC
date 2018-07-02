@@ -47,6 +47,6 @@ def test_PredictSNR():
 
 if __name__ == "__main__":
     test_Simulate()
-    test_PredictSNR()
+    # test_PredictSNR()
     test_SimSpectrum()
     plt.show()
