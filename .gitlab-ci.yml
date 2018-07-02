@@ -35,6 +35,11 @@ testTopologiGenerator:
   script:
         - "python -m AnalogToDigital.test.test_topologiGenerator"
 
+testDeltaSigma:
+  stage: test
+  script:
+        - "python -m AnalogToDigital.test.test_deltaSigma"
+
 gmCADC:
   stage: simulate
   script:
