@@ -36,6 +36,10 @@ testTopologiGenerator:
         - "python -m AnalogToDigital.test.test_topologiGenerator"
 
 testDeltaSigma:
+  before_script:
+    - "git clone https://github.com/ggventurini/python-deltasigma.git"
+    - "cd python-deltasigma"
+    - "python setup.py install"
   stage: test
   script:
         - "python -m AnalogToDigital.test.test_deltaSigma"
