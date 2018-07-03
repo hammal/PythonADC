@@ -36,6 +36,7 @@ testTopologiGenerator:
         - "python -m AnalogToDigital.test.test_topologiGenerator"
 
 testDeltaSigma:
+  image: continuumio/anaconda
   before_script:
     # - "git clone https://github.com/ggventurini/python-deltasigma.git"
     # - "cd python-deltasigma"
