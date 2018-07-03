@@ -40,7 +40,7 @@ class DeltaSigma(object):
         fB = int(np.ceil(N/(2. * self.OSR)))
         f = np.linspace(0, 0.5, N/2. + 1)
         spec = np.fft.fft(v * ds_hann(N))/(N/4)
-        plot(f, dbv(spec[:N/2. + 1]),'b', label='Simulation')
+        plot(f, dbv(spec[:N/2 + 1]),'b', label='Simulation')
         figureMagic([0, 0.5], 0.05, None, [-120, 0], 20, None, (16, 6), 'Output Spectrum')
         xlabel('Normalized Frequency')
         ylabel('dBFS')
