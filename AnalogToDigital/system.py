@@ -80,7 +80,7 @@ class Noise(Input):
         return self.steeringVector * self.scalarFunction(t)
 
     def scalarFunction(self, t):
-        return  self.std * np.random.randn(1)
+        return  self.std * np.random.randn(t.size)
 
 class System(object):
 
@@ -88,8 +88,8 @@ class System(object):
         """
         Initalize the Model.
         """
-        self.A = np.array(A, dtype=np.double)
-        self.c = np.array(c, dtype=np.double)
+        self.A = np.array(A, dtype=np.float64)
+        self.c = np.array(c, dtype=np.float64)
 
         self.order = self.A.shape[0]
         self.outputOrder = self.c.shape[0]

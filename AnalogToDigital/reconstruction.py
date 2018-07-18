@@ -19,6 +19,11 @@ def care(A, B, Q, R):
     # print(B)
     # print(Q)
     # print(R)
+    A = np.array(A, dtype=np.float64)
+    B = np.array(B, dtype=np.float64)
+    Q = np.array(Q, dtype=np.float64)
+    R = np.array(R, dtype=np.float64)
+
     Vf = scipy.linalg.solve_continuous_are(A, B, Q, R)
     Vb = scipy.linalg.solve_continuous_are(-A, B, Q, R)
     # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
@@ -153,9 +158,9 @@ class WienerFilter(object):
 
 
         if 'sigmaU2' in options:
-            self.sigmaU2 = options['sigmaU2']
+            self.sigmaU2 = np.array(options['sigmaU2'], dtype=np.float64)
         else:
-            self.sigmaU2 = np.ones(len(inputs))
+            self.sigmaU2 = np.ones(len(inputs), dtype=np.float64)
 
 
 
@@ -163,13 +168,13 @@ class WienerFilter(object):
         # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
         A = self.system.A.transpose()
         B = self.system.c
-        Q = np.zeros((self.order, self.order))
+        Q = np.zeros((self.order, self.order), dtype=np.float64)
         for index, input in enumerate(inputs):
             Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
 
         # print("Q before ", Q)
         for noiseSource in self.noise:
-            Q += (noiseSource.std) ** 2 * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
+            Q += (noiseSource.std) ** 2. * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
         # print("Q after ", Q)
         if self.eta2.size > 1:
             R = np.diag(self.eta2)
@@ -191,12 +196,12 @@ class WienerFilter(object):
 
         self.Ab = scipy.linalg.expm(-self.tempAb * self.Ts)
 
-        B = np.zeros((self.order, len(inputs)))
+        B = np.zeros((self.order, len(inputs)), dtype=np.float64)
         for index, input in enumerate(inputs):
             B[:, index] = input.steeringVector
 
-        print("V_f - Af Vf Af")
-        print(Vf - np.dot(self.Af, np.dot(Vf, self.Af.transpose())))
+        # print("V_f - Af Vf Af")
+        # print(Vf - np.dot(self.Af, np.dot(Vf, self.Af.transpose())))
 
         self.w = np.linalg.solve(Vf + Vb, B)
 
@@ -206,8 +211,8 @@ class WienerFilter(object):
 
     def computeControlTrajectories(self, control):
         if control.type == 'analog switch':
-            self.Bf = np.zeros((self.order, self.order))
-            self.Bb = np.zeros((self.order, self.order))
+            self.Bf = np.zeros((self.order, self.order), dtype=np.float64)
+            self.Bb = np.zeros((self.order, self.order), dtype=np.float64)
             for controlIndex in range(self.order):
                 def ForwardDerivative(x, t):
                     hom = np.dot(self.tempAf, x.reshape((self.order,1))).flatten()
@@ -222,9 +227,9 @@ class WienerFilter(object):
                     return hom + control
 
                 # self.Bf = np.dot(self.system.zeroOrderHold(tempAf, Ts), self.system.B)
-                self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
+                self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
                 # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
-                self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
+                self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
 
             self.Bf = np.dot(self.Bf, self.mixingMatrix)
             self.Bb = np.dot(self.Bb, self.mixingMatrix)
@@ -243,8 +248,8 @@ class WienerFilter(object):
         self.computeControlTrajectories(control)
 
         # Initalise memory
-        u = np.zeros((control.size, len(self.inputs)))
-        mf = np.zeros((self.order, control.size))
+        u = np.zeros((control.size, len(self.inputs)), dtype=np.float64)
+        mf = np.zeros((self.order, control.size), dtype=np.float64)
         mb = np.zeros_like(mf)
 
         for index in range(1, control.size):
@@ -720,6 +725,7 @@ class SelfCalibration(object):
         # Do alternating maximisation
         for turn in range(numberOfIterations):
             resA = self.calibrateA(theta[:self.order - 1])
+            print(resA)
             theta[:self.order - 1] = resA.x
             self.computeAfAb(self.thetaToAIntegratorChain(theta[:self.order - 1]))
             print(resA.x)

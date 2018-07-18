@@ -78,7 +78,8 @@ class Simulator(object):
                 for noiseSource in self.options['noise']:
                     if noiseSource['std'] > 0:
                         std = np.sqrt(noiseSource["std"]**2 * (timeInstance - t0)) * noiseSource["steeringVector"]
-                        noise_state += np.random.randn() * std
+                        # noise_state += np.random.randn() * std
+                        noise_state += (np.random.rand() - 0.5 ) * 2 * std
                 self.state += noise_state
 
 

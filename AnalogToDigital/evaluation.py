@@ -21,8 +21,10 @@ class Evaluation(object):
         self.cmap = plt.get_cmap('jet_r')
         self.signalBand = signalBand
 
-    def ExpectedSNRForEquivalentIntegratorChain(self,OSR):
-        return 1 * 6.02 + 1.76 + 10 * np.log10(2 * self.system.order + 1) - 20 * self.system.order * np.log10(np.pi) + 10 * (2 * self.system.order + 1) * np.log10(OSR)
+    def ExpectedSNRForEquivalentIntegratorChain(self,OSR, N=1):
+        DR = N * 6.02 + 1.76 + 10 * np.log10(2 * self.system.order + 1) - 20 * self.system.order * np.log10(np.pi) + 10 * (2 * self.system.order + 1) * np.log10(OSR)
+        ENOB = (DR - 1.76) / 6.02
+        return (DR, ENOB)
 
 
     def AnalyticalTranferFunction(self, f, steeringVector):
@@ -127,7 +129,7 @@ class Evaluation(object):
         # N = (1 << 20)
         N = (1 << 16)
         # N = (1 << 8)
-        N = t.size / 4
+        N = t.size
         Ts = t[1] - t[0]
         refSpec = [signal.welch(x.scalarFunction(t), 1./Ts, nperseg= N)[1] for x in self.references]
         freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
@@ -140,7 +142,7 @@ class Evaluation(object):
         # max = (np.ones_like(freq) * max).flatten()
         # min = (np.ones_like(freq) * min).flatten()
 
-        return freq, inputSpec, refSpec[0]
+        return freq, inputSpec, refSpec
 
     def findMaxAndMean(self, array):
         offset = 30
