@@ -6,6 +6,7 @@ import copy
 import scipy
 from scipy.optimize import minimize
 from scipy.integrate import odeint
+import sdeint
 
 
 class Simulator(object):
@@ -13,7 +14,7 @@ class Simulator(object):
     The Simulator is an object that is defined by a system, a control and can
     handle one or multiple inputs for simulating.
     """
-    def __init__(self, system, control=None, initalState=None,options={}):
+    def __init__(self, system, control=None, initalState=None, options={}):
         self.system = system
         self.control = control
 
@@ -40,6 +41,7 @@ class Simulator(object):
         index = 0
         tnew = t
 
+
         if 'jitter' in self.options:
             jitter_range = self.options['jitter']['range']
             if jitter_range > (t[1] - t[0])/2.:
@@ -55,7 +57,7 @@ class Simulator(object):
                 output[index, :] = self.system.output(self.state)
                 index += 1
 
-            def derivate(x, t):
+            def f(x, t):
                 """
                 Compute the system derivative considering state control and input.
                 """
@@ -65,23 +67,41 @@ class Simulator(object):
                 if inputs:
                     for signal in inputs:
                         input += signal.fun(timeInstance)
-                        # print("Input = %s" % signal.fun(timeInstance))
+
                 return hom + control + input
+
+            def g(x, t):
+                if "noise" in self.options:
+                    # Shock Noise
+                    noise_state = np.zeros((self.system.order, len(self.options["noise"])))
+                    for i, noiseSource in enumerate(self.options['noise']):
+                        # print(noiseSource['std'])
+                        if noiseSource['std'] > 0:
+                            # std = np.sqrt(noiseSource["std"] ** 2 * (timeInstance - t0)) * noiseSource["steeringVector"]
+                            std = noiseSource["std"] * noiseSource["steeringVector"]
+                            noise_state[:, i]= std
+                            # noise_state += (np.random.rand() - 0.5 ) * 2 * std
+                    return noise_state
+                else:
+                    return np.zeros(self.system.order)
+
             # Solve ordinary differential equation
-            self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=10000, rtol=1e-13)[-1, :]
-
+            # self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=100, rtol=1e-13, hmin=1e-12)[-1, :]
+            tspace = np.linspace(t0, timeInstance, 10)
+            self.state = sdeint.itoint(f, g, self.state, tspace)[-1, :]
             # If thermal noise should be simulated
-            if "noise" in self.options:
+            # if "noise" in self.options:
 
-                # Shock Noise
-                noise_state = np.zeros(self.system.order)
-                for noiseSource in self.options['noise']:
-                    if noiseSource['std'] > 0:
-                        std = np.sqrt(noiseSource["std"]**2 * (timeInstance - t0)) * noiseSource["steeringVector"]
-                        # noise_state += np.random.randn() * std
-                        noise_state += (np.random.rand() - 0.5 ) * 2 * std
-                self.state += noise_state
-
+                # # Shock Noise
+                # noise_state = np.zeros(self.system.order)
+                # for noiseSource in self.options['noise']:
+                #     # print(noiseSource['std'])
+                #     if noiseSource['std'] > 0:
+                #         # std = np.sqrt(noiseSource["std"] ** 2 * (timeInstance - t0)) * noiseSource["steeringVector"]
+                #         std = noiseSource["std"] * noiseSource["steeringVector"]
+                #         noise_state += np.random.randn() * std
+                #         # noise_state += (np.random.rand() - 0.5 ) * 2 * std
+                # self.state += noise_state
 
                 # # Thermal Noise Simulation
                 # for noiseSource in self.options['noise']:
@@ -100,6 +120,18 @@ class Simulator(object):
             # Increase time
             t0 = timeInstance
             # Update control descisions
+            # print(self.state)
+
+            # Clip if state is out of bound
+            if False:
+                bound = 1.
+                above = self.state > bound
+                below = self.state < -bound
+
+                self.state[above] = bound
+                self.state[below] = -bound
+
+            # print(self.state)
             self.control.update(self.state)
 
         # Return simulation object

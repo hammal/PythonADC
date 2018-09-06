@@ -23,7 +23,7 @@ class DeltaSigma(object):
         self.OSR = OSR
         # self.form = "CIFB"
         self.form = "CRFB"
-        self.ntf = synthesizeNTF(self.order, self.OSR, opt=1)
+        self.ntf = synthesizeNTF(self.order, self.OSR, opt=0)
         a, g, b, c = realizeNTF(self.ntf, self.form)
         self.ABCD = stuffABCD(a, g, b, c, self.form)
         # print("ABCD:\n%s"% self.ABCD)
@@ -41,21 +41,23 @@ class DeltaSigma(object):
 
     def simSpectrum(self):
         plt.figure()
+        N = 8092
         Ts = 1.
         scaling = self.nlev[0] / 2.
         amplitude = 1. * scaling
         frequency = 1./self.OSR / 2.
+        frequencyIndex = np.int(1./Ts / frequency * N / 2)
+        print("freqIndex", frequencyIndex)
         phase = 0.
         vector = np.zeros(self.order)
         inp = ADC.system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
-        t = np.arange(8092) * Ts
+        t = np.arange(N) * Ts
         v = self.simulate(inp, t) / scaling
-        N = t.size
-        ftest = frequency
+        ftest = frequencyIndex
         fB = int(np.ceil(N/(2. * self.OSR)))
         f = np.linspace(0, 0.5, N/2. + 1) / inp.Ts
         spec = np.fft.fft(v * ds_hann(N))/(N/4)
-        plot(f, dbv(spec[:N/2 + 1]),'b', label='Simulation')
+        plot(f, dbv(spec[:np.int(N/2) + 1]),'b', label='Simulation')
         # figureMagic([0, 0.5], 0.05, None, [-120, 0], 20, None, (16, 6), 'Output Spectrum')
         xlabel('Frequency')
         ylabel('dBFS')
@@ -97,7 +99,10 @@ class MASH(DeltaSigma):
     def __init__(self, OSR, deltaSigmas):
         self.OSR = OSR
         self.deltaSigmas = deltaSigmas
+        self.order = len(deltaSigmas)
         self.computeCancellationLogic(deltaSigmas)
+        self.filter = ADC.filters.TransferFunction()
+        self.filter.butterWorth(self.order, 1./(2. * self.OSR))
 
     def simulate(self, input, t):
         u = input.scalarFunction(t)
@@ -140,16 +145,14 @@ class MASH(DeltaSigma):
     def reconstruction(self, v):
         out = np.zeros(v.shape[0])
         for index, filter in enumerate(self.H):
-            # print(filter.num, filter.den)
-            if index == 0:
-                # out += signal.lfilter(filter.num, filter.den, v[:, index])
-                out += v[:, index]
-            else:
-                # noise = signal.filtfilt(filter.num, filter.den, v[:, index])
-                noise =  signal.lfilter(filter.num, filter.den, v[:, index])
-                # print(noise)
-                out -=  noise
+            print("For filter %i, with coefficents\n%s\n" % (index, filter))
+            sos = signal.tf2sos(filter.num, filter.den)
+            noise = signal.sosfilt(sos, v[:, index])
+            out = out + (-1.)**(index) * noise
         return out
+
+    def lowPassFilter(self, signal):
+        return self.filter.filter(signal)
 
 
     def concatenateSystems(self,H1,H2):
@@ -162,21 +165,23 @@ class MASH(DeltaSigma):
 
     def simSpectrum(self):
         plt.figure()
+        N = 8092
         Ts = 1.
         scaling = self.deltaSigmas[0].nlev[0] / 2
         amplitude = 1. * scaling
         frequency = 1./self.OSR / 2.
+        frequencyIndex = np.int(1./Ts / frequency * N)
         phase = 0.
         vector = np.zeros(5)
         inp = ADC.system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
         t = np.arange(8092) * Ts
         v = v = self.reconstruction(self.simulate(inp, t)/scaling)
-        N = t.size
-        ftest = frequency
+
+        ftest = frequencyIndex
         fB = int(np.ceil(N/(2. * self.OSR)))
         f = np.linspace(0, 0.5, N/2. + 1) / inp.Ts
         spec = np.fft.fft(v * ds_hann(N))/(N/4)
-        plot(f, dbv(spec[:N/2 + 1]),'b', label='Simulation')
+        plot(f, dbv(spec[:np.int(N/2) + 1]),'b', label='Simulation')
         # figureMagic([0, 0.5], 0.05, None, [-120, 0], 20, None, (16, 6), 'Output Spectrum')
         xlabel('Frequency')
         ylabel('dBFS')

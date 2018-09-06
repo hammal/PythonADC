@@ -169,19 +169,20 @@ class WienerFilter(object):
         A = self.system.A.transpose()
         B = self.system.c
         Q = np.zeros((self.order, self.order), dtype=np.float64)
+        QNoise = np.zeros_like(Q)
         for index, input in enumerate(inputs):
             Q += self.sigmaU2[index] * np.outer(input.steeringVector,input.steeringVector)
 
         # print("Q before ", Q)
         for noiseSource in self.noise:
-            Q += (noiseSource.std) ** 2. * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
+            QNoise += (noiseSource.std) ** 2. * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
         # print("Q after ", Q)
         if self.eta2.size > 1:
             R = np.diag(self.eta2)
         else:
             R = self.eta2.reshape((1,1))
-        # print(A,B,Q,R)
-        Vf, Vb = care(A, B, Q, R)
+        print("Q:\n%s\nQNoise:\n%s" % (Q, QNoise))
+        Vf, Vb = care(A, B, Q + QNoise, R)
         print("Vf, Vb\n",Vf + Vb)
 
         if self.eta2.ndim < 2:
@@ -613,8 +614,13 @@ class DiscreteTimeKalmanFilterWithBoundedOutput(DiscreteTimeKalmanFilter):
         self.computeControlTrajectories(control)
 
         bound = 1.
-        infty = 1e10
-        r2 = self.eta2[0] / infty
+        # infty = 1e8
+        # infty = 1e12
+        # infty = 1e6
+        # infty = 1e8
+        infty = 1e8
+        # r2 = self.eta2[0] / infty
+        r2 = self.eta2[0] / 1e10
 
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float)

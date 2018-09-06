@@ -23,6 +23,9 @@ class TransferFunction(object):
                 bnew[-index - 1] = self.b[-index - 1]
         self.b = bnew
 
+    def filter(self, signal):
+        """ Filter a signal with the given transferfunction"""
+        return signal.lfilter(self.b, self.a, signal)
 
 
     def butterWorth(self, order, criticalFrequencies, type='lowpass'):
