@@ -2,7 +2,7 @@ stages:
   - test
   - simulate
 
-image: continuumio/anaconda3
+image: continuumio/anaconda3:latest
 
 before_script:
   - "conda install -y scipy"
