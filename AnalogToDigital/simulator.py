@@ -83,7 +83,7 @@ class Simulator(object):
                             # noise_state += (np.random.rand() - 0.5 ) * 2 * std
                     return noise_state
                 else:
-                    return np.zeros(self.system.order, 1)
+                    return np.zeros((self.system.order, 1))
 
             # Solve ordinary differential equation
             # self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=100, rtol=1e-13, hmin=1e-12)[-1, :]
