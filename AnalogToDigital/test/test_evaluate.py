@@ -308,7 +308,7 @@ def test_evaluate_WithNoise():
     _, MIMOSPECTRUM, _  = ev_MIMO.PowerSpectralDensity(t)
 
     plt.figure()
-    plt.semilogx(freq, 10 * np.log10(np.abs(SIGNALSPECTRUM.flatten())), label="u_hatSISO")
+    plt.semilogx(freq, 10 * np.log10(np.abs(SIGNALSPECTRUM[0].flatten())), label="u_hatSISO")
     plt.semilogx(freq, 10 * np.log10(np.abs(SISOSPECTRUM.flatten())), label="u_hatSISO")
     plt.semilogx(freq, 10 * np.log10(np.abs(SIMOSPECTRUM.flatten())), label="u_hatSIMO")
     plt.semilogx(freq, 10 * np.log10(np.abs(MIMOSPECTRUM[:, 0].flatten())), label="u_hatMIMO")
