@@ -9,7 +9,7 @@ before_script:
   - "pip install cvxopt"
   - "mkdir -p /root/.config/matplotlib"
   - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
-  - "git clone https://github.com/mattja/sdeint.git; cd sdeint; python setup.py install"
+  - "git clone https://github.com/mattja/sdeint.git; cd sdeint; python setup.py install; cd .."
 
 
 testEvaluate:
