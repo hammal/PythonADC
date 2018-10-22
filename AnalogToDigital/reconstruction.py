@@ -161,8 +161,7 @@ class WienerFilter(object):
             self.sigmaU2 = np.array(options['sigmaU2'], dtype=np.float64)
         else:
             self.sigmaU2 = np.ones(len(inputs), dtype=np.float64)
-
-
+        
 
         # Solve care
         # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
@@ -184,6 +183,10 @@ class WienerFilter(object):
         print("Q:\n%s\nQNoise:\n%s" % (Q, QNoise))
         Vf, Vb = care(A, B, Q + QNoise, R)
         print("Vf, Vb\n",Vf + Vb)
+
+        # These are used for computing an offset contribution y
+        self.ForwardOffsetMatrix = np.dot(Vf, self.system.c) / self.eta2
+        self.BackwardOffsetMatrix = np.dot(Vb, self.system.c) / self.eta2
 
         if self.eta2.ndim < 2:
             self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
@@ -231,9 +234,19 @@ class WienerFilter(object):
                 self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
                 # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
                 self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
+            
+            # Compute Offsets
+            self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, control.references))
+            self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, control.references))
+        
+            print("Offset Matrices:")
+            print(self.Of, self.Ob)
 
+            # Compute Control Mixing contributions
             self.Bf = np.dot(self.Bf, self.mixingMatrix)
             self.Bb = np.dot(self.Bb, self.mixingMatrix)
+
+                
         else:
             raise NotImplemented
 
@@ -247,16 +260,17 @@ class WienerFilter(object):
         # Compute Bf and Bb for this type of control
         self.mixingMatrix = control.mixingMatrix
         self.computeControlTrajectories(control)
-
+        
+ 
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float64)
         mf = np.zeros((self.order, control.size), dtype=np.float64)
         mb = np.zeros_like(mf)
 
         for index in range(1, control.size):
-            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1])
+            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1]) + self.Of
         for index in range(control.size - 2, 1, -1):
-            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index])
+            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
         return u
 

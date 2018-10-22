@@ -50,21 +50,22 @@ class FirstOrderHold(Input):
 
 class Sin(Input):
     """
-    A pure sinussodial is only parametericed by amplitude frequency and phase.
+    A pure sinusodial is only parametericed by amplitude frequency and phase.
     """
-    def __init__(self, Ts, amplitude, frequency, phase, steeringVector, name="Sinusodial"):
+    def __init__(self, Ts, amplitude, frequency, phase, steeringVector, name="Sinusodial", offset = 0.):
         self.Ts = Ts
         self.amplitude = amplitude
         self.frequency = frequency
         self.phase = phase
+        self.offset = offset
         self.steeringVector = steeringVector
         self.name = name
 
     def fun(self, t):
-        return self.steeringVector * self.amplitude * np.sin(2. * np.pi * self.frequency * t + self.phase)
+        return self.steeringVector * self.scalarFunction(t) 
 
     def scalarFunction(self, t):
-        return self.amplitude * np.sin(2. * np.pi * self.frequency * t + self.phase)
+        return self.amplitude * np.sin(2. * np.pi * self.frequency * t + self.phase) + self.offset
 
 
 class Noise(Input):
@@ -86,7 +87,7 @@ class System(object):
 
     def __init__(self, A, c):
         """
-        Initalize the Model.
+        Initialize the Model.
         """
         self.A = np.array(A, dtype=np.float64)
         self.c = np.array(c, dtype=np.float64)
@@ -111,15 +112,15 @@ class System(object):
 
 class Control(object):
     """
-    Analog Switch Control is the default control behaviour.
+    Analog Switch Control is the default control behavior.
 
     It keeps the:
     - Mixingmatrix
-    - The control desisions
+    - The control decisions
     - The type
     which are all needed for reconstruction
     """
-    def __init__(self, mixingMatrix, size, memory=np.array([])):
+    def __init__(self, mixingMatrix, size, memory=np.array([]), options = {}):
         self.type = 'analog switch'
         # The internal memory
         self.mixingMatrix = mixingMatrix
@@ -131,26 +132,41 @@ class Control(object):
         self.size = size
         self.memory_Pointer = 0
 
+        if 'scalingSequence' in options:
+            print("Scaling Sequence Active")
+            self.scalingSequence = options['scalingSequence']
+        else:
+            self.scalingSequence = None
+
+        if 'references' in options:
+            print("Using references: %s" % options['references'])
+            self.references = options['references']
+        else:
+            self.references = np.zeros(mixingMatrix.shape[1])
+
     def __getitem__(self, item):
         """
-        this function is for retriving control descisions from memory at index k
+        this function is for retriving control decisions from memory at index k
         as:
         control[k]
         """
+        if self.scalingSequence:
+            return np.dot(self.scalingSequence(item), self.memory[item])
+
         return self.memory[item]
 
     def update(self, state):
         """
-        This is a function that sets the next control descisions
+        This is a function that sets the next control decisions
         """
-        self.memory[self.memory_Pointer, :] = (state > 0).flatten() * 2 - 1
+        self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
         self.memory_Pointer += 1
 
     def fun(self, t):
         """
         This is the control function evaluated at time t
         """
-        return np.dot(self.mixingMatrix, self.memory[self.memory_Pointer - 1, :].reshape((self.mixingMatrix.shape[1],1))).flatten()
+        return np.dot(self.mixingMatrix, self[self.memory_Pointer - 1].reshape((self.mixingMatrix.shape[1],1))).flatten()
 
 
 # class Controller(object):

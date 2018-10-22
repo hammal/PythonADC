@@ -47,9 +47,9 @@ class Simulator(object):
             if jitter_range > (t[1] - t[0])/2.:
                 raise "Too large jitter range. Time steps could change order"
             tnew = t + (np.random.rand(t.size) - 0.5) * jitter_range
-            print("Jitter!")
-            print(t)
-            print(tnew)
+            print("With Jitter!")
+            # print(t)
+            # print(tnew)
 
         for timeInstance in tnew[1:]:
             # Store observations
