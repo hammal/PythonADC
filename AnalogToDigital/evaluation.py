@@ -5,6 +5,206 @@ import matplotlib.pyplot as plt
 
 NUMBER_OF_POINTS = 1000
 
+class SigmaDeltaPerformance(object):
+    """
+    This is a helper class for establishing consistent figures of merit.
+    - PSD
+    - DR
+    - SFDR
+    - HD
+    - THD
+    - IPn (Interception point n, for n = 1,...,N
+    """
+
+    def __init__(self, system, estimate, fs = 1., osr = 32, fullScaleAmplitude = 1.):
+        self.OSR = osr
+        self.system = system
+        self.fs = fs
+        self.fullScale = fullScaleAmplitude
+        self.estimate = estimate.flatten()
+        self.estimate -= np.mean(self.estimate)
+        self.freq, self.spec = self.powerSpectralDensity()
+        self.fIndex = self.findMax(self.spec)
+        self.f = self.fIndex * self.fs / (2. * self.N)
+        print("f: %s" % self.f)
+        self.harmonics, self.harmonicDistortion = self.computeHarmonics()
+        # print(self.harmonics)
+
+    def PlotPowerSpectralDensity(self, ax = None):
+        if not ax:
+            fig, ax = plt.subplots()
+        
+        noiseMask = np.ones_like(self.spec, dtype=bool)
+
+        for h in self.harmonics:
+            if h["power"] > 0:
+                # print(h["support"])
+                noiseMask[h["support"]] = False
+        ax.semilogx(self.freq, 10 * np.log10(self.spec))
+        ax.semilogx(self.freq[noiseMask], 10 * np.log10(self.spec[noiseMask]), color='b', label = "noise")
+        for h in self.harmonics:
+            ax.semilogx(self.freq[h['support']], 10 * np.log10(self.spec[h['support']]), "-*", color='r', label="h%i" % h['number'])
+        return ax
+
+    def findMax(self, arg):
+        """
+        findMax returns the index for the peak of arg
+        """
+        return np.argmax(arg)
+
+
+    def PlotPerformanceOSR(self, ax=None, OSRMax = 256):
+        if not ax:
+            fig, ax = plt.subplots()
+        # N = np.int(np.log2(OSRMax * 2))
+        # osr = 2 ** np.arange(N)
+        N = 100
+        osr = np.logspace(0, np.log2(OSRMax), num=N, base=2.)
+        # print(osr)
+        dr = np.zeros(N)
+        snr = np.zeros(N)
+        esnr = np.zeros(N)
+        thd = np.zeros(N)
+        
+        for n in range(N):
+            dr[n], snr[n], thd[n], _, _ = self.Metrics(osr[n])
+            esnr[n] = self.ExpectedSNR(osr[n])
+        ax.plot(osr, dr, label="DR")
+        ax.plot(osr, esnr, label="Expected SNR")
+        ax.plot(osr, snr, label="SNR")
+        ax.plot(osr, thd, label="THD")
+        return ax
+    
+    def Metrics(self, OSR):
+        epsilon = 1e-18
+        if OSR < 1:
+            raise "Non valid oversampling rate"
+        fb = self.fs / np.float(2 * OSR)
+
+        noiseMask = np.ones_like(self.spec, dtype=bool)
+
+
+        THD = 0.
+        signalPower = epsilon
+        for h in self.harmonics:
+            if h["power"] > 0 and h["f"] <= fb:
+                noiseMask[h["support"]] = False
+                if h["number"] == 1:
+                    signalPower = h['power']
+                else:
+                    THD += h["power"]
+        
+        noise = self.spec[noiseMask]
+        noisePower = np.sum(noise[:self.frequencyToIndex(fb)])
+        noisePower += np.mean(noise[:self.frequencyToIndex(fb)]) * np.sum(noiseMask[:self.frequencyToIndex(fb)])
+
+        DR = 10 * np.log10(1./noisePower)
+        SNR = 10 * np.log10(signalPower) + DR
+        THD = 10 * np.log10(THD/signalPower)
+        THDN = 10 * np.log10((THD + noisePower)/signalPower)
+        return DR, SNR, THD, THDN, self.ENOB(DR)
+
+    def ENOB(self, DR):
+        return (DR - 1.76) / 6.02
+
+    def ExpectedSNR(self,OSR, N=1):
+            DR = 10. * np.log10(3 * (2 ** N - 1)**2 * (2 * self.system.order + 1) * OSR ** (2 * self.system.order + 1) / (2 * np.pi ** (2 * self.system.order)))
+            return DR
+    def computeHarmonics(self):
+        # print(f)
+        fIndex = self.fIndex
+        number = 1
+        harmonics = []
+        harmonicDistortion = []
+        while fIndex < self.N / 2.:
+            # print(f)
+            harmonic, support = self.peakSupport(self.fIndex)
+            if harmonic:
+                power = np.sum(self.spec[support])
+            else:
+                power = 0.
+                support = None
+            harmonics.append(
+                {   
+                    "f": fIndex,
+                    "number": number,
+                    "power": power,
+                    "support": support,
+                }
+            )
+
+            if number == 1:
+                harmonicDistortion.append(np.sqrt(power))
+            else:
+                harmonicDistortion.append(np.sqrt(power / harmonicDistortion[0]))
+            number += 1
+            fIndex *= 2.
+
+        harmonicDistortion = np.array(harmonicDistortion)
+        return harmonics, harmonicDistortion
+
+    def powerSpectralDensity(self):
+        """
+        Compute Power-spectral density
+        """
+        self.N = 256 * self.OSR
+        window = 'hanning'
+
+        wind = np.hanning(self.N)
+
+        FullScale = 1.25 # 2.5 Vpp
+
+        w1 = np.linalg.norm(wind, 1)
+        w2 = np.linalg.norm(wind, 2)
+
+        NWB = w2 / w1
+ 
+
+        # spectrum = np.abs(np.fft.fft(self.estimate[:self.N] * wind, axis=0, n = self.N)) ** 2 
+        # spectrum = spectrum[:self.N/2]
+        freq = np.fft.fftfreq(self.N)[:self.N/2]
+        # spectrum /= (self.N / 2) * (self.fs / 2)
+        freq, spectrum = scipy.signal.welch(self.estimate, fs=1.0, window=window, nperseg=self.N, noverlap=None, nfft=None, return_onesided=True, scaling='spectrum', axis=0)
+        # spectrum /= (FullScale / 4. * w1) ** 2
+        return freq, spectrum
+
+    def frequencyToIndex(self, f):
+        """
+        Returns the index for frequency f
+        """
+        return np.int(f * 2 / self.fs * self.spec.size)
+
+    def peakSupport(self, fIndex):
+        """
+        Checks if there is peak at f and returns its support
+        """
+        localPathSize = 200
+        maxPeakNeighbor = 20
+        midIndex = fIndex
+        # print("Peak Index: %s" % midIndex)
+        lowerIndexBound = np.minimum(localPathSize, midIndex)
+        upperIndexBound = np.minimum(localPathSize, self.spec.size - midIndex - 1)
+        tempSpec = self.spec[midIndex - lowerIndexBound:midIndex + upperIndexBound]
+        # index = (upperIndexBound - lowerIndexBound) / 2
+        index = lowerIndexBound - 1
+        peakHeight = tempSpec[index]
+        avgHeight = (np.mean(tempSpec[:index]) + np.mean(tempSpec[index+1:])) / 2.
+        maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
+        for offset in range(1, np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
+            # print(avgHeight, peakHeight)
+            if peakHeight / avgHeight > maxRange["value"]:
+                maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
+                maxRange["value"] = peakHeight / avgHeight 
+                # print(maxRange["value"])
+            peakHeight += tempSpec[index + offset] + tempSpec[index - offset] 
+            avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
+
+        if maxRange["value"] > 4:
+            return True, maxRange["range"]
+        else:
+            return False, np.array([])
+
+
 class Evaluation(object):
     """
     This is a helper class for establishing concistent figures of merit.
@@ -26,6 +226,12 @@ class Evaluation(object):
         ENOB = (DR - 1.76) / 6.02
         return (DR, ENOB)
 
+
+    def ExpectedQuantizationNoiseForEquivlanetIntegratorChainInDB(self, f, fs, N=1):
+        res = np.zeros_like(f)
+        for index, freq in enumerate(f):
+            res[index] = -self.ExpectedSNRForEquivalentIntegratorChain(fs/(2. * freq), N=N)[0]
+        return res
 
     def AnalyticalTranferFunction(self, f, steeringVector):
         """
@@ -92,7 +298,7 @@ class Evaluation(object):
         fig, ax = plt.subplots(nrows=2, ncols=1)
         index = 0
         colors = self.cmap(np.arange(self.estimates.shape[1] + len(self.references))/np.float(self.estimates.shape[1] + len(self.references)))
-        print(np.arange(self.estimates.shape[1] + 1)/np.float(self.estimates.shape[1] + len(self.references)))
+        # print(np.arange(self.estimates.shape[1] + 1)/np.float(self.estimates.shape[1] + len(self.references)))
         for ref in self.references:
             tf_abs = np.abs(refSpec[index])
             ax[0].plot(freq, tf_abs, label=ref.name, c=colors[index])
@@ -129,10 +335,12 @@ class Evaluation(object):
         # N = (1 << 20)
         N = (1 << 16)
         # N = (1 << 8)
-        N = t.size
+        # N = t.size
+        # 256 * OSR
+        N = 256 * 32
         Ts = t[1] - t[0]
         refSpec = [signal.welch(x.scalarFunction(t), 1./Ts, nperseg= N)[1] for x in self.references]
-        freq, inputSpec = signal.welch(self.estimates, 1./Ts, axis=0, nperseg = N)
+        freq, inputSpec = signal.welch(self.estimates, 1./Ts, nperseg= N, axis=0)
         # freq = np.fft.fftfreq(inputSpec.shape[0], d=Ts)
 
         # max, min = self.findMaxAndMean(inputSpec)
@@ -143,6 +351,19 @@ class Evaluation(object):
         # min = (np.ones_like(freq) * min).flatten()
 
         return freq, inputSpec, refSpec
+
+    def PowerSpectralDensityFFT(self, t):
+        Ts = t[1] - t[0]
+        fs = 1./Ts
+        N = int(2 ** np.ceil(np.log2(t.size)))
+        # N = (1 << 8)
+        # window = np.ones(N)
+        window = np.hanning(t.size)
+        
+        refSpec =  [np.abs(np.fft.fft(x.scalarFunction(t) * window, axis=0, n = N)) ** 2 / N for x in self.references]
+        inputSpec = np.abs(np.fft.fft(self.estimates * window.reshape((window.size, 1)) * np.ones_like(self.estimates), axis=0, n = N)) ** 2 / ((N / 2) * (fs / 2)) 
+        freq = np.fft.fftfreq(N, d=Ts)
+        return freq[:N/2], inputSpec[:N/2], refSpec[:N/2]
 
     def findMaxAndMean(self, array):
         offset = 30

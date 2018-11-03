@@ -20,7 +20,9 @@ class Simulator(object):
 
         # Set the inital state
         if not initalState:
-            self.state = np.zeros(system.order)
+            # self.state = np.zeros(system.order)
+            self.state = np.random.randint(2, size=system.order) * 2. - 1.
+            print("Initial state set: %s" % self.state)
         else:
             self.state = initalState.reshape((system.order,))
 

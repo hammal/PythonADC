@@ -236,8 +236,12 @@ class WienerFilter(object):
                 self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
             
             # Compute Offsets
-            self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, control.references))
-            self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, control.references))
+            if self.ForwardOffsetMatrix.shape[1] == 1:
+                self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
+                self.Ob = - np.dot(self.Bb, self.BackwardOffsetMatrix * control.references[0]).flatten()
+            else:
+                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, control.references))
+                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, control.references))
         
             print("Offset Matrices:")
             print(self.Of, self.Ob)
@@ -252,7 +256,7 @@ class WienerFilter(object):
 
 
 
-    def filter(self, control):
+    def filter(self, control, initialState=None):
         """
         This is the actual filter operation. The controller needs to be a
         Controller class instance from system.py.
@@ -266,6 +270,12 @@ class WienerFilter(object):
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float64)
         mf = np.zeros((self.order, control.size), dtype=np.float64)
         mb = np.zeros_like(mf)
+
+        # If not initial state use the control sequence and assume at rails 1 V 
+        if initialState:
+            mf[:,0] = initialState
+        else:
+            mf[:,0] = np.array(control[0])
 
         for index in range(1, control.size):
             mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1]) + self.Of

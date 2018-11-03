@@ -16,3 +16,5 @@ import AnalogToDigital.simulator as simulator
 import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.evaluation as evalutation
 import AnalogToDigital.filters as filters
+
+import saveFigs

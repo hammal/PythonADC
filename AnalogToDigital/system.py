@@ -144,6 +144,12 @@ class Control(object):
         else:
             self.references = np.zeros(mixingMatrix.shape[1])
 
+        if 'offsets' in options:
+            print("Using offsets: %s" % options['offsets'])
+            self.offsets = options['offsets']
+        else:
+            self.offsets = np.zeros(mixingMatrix.shape[1])
+
     def __getitem__(self, item):
         """
         this function is for retriving control decisions from memory at index k
@@ -167,7 +173,6 @@ class Control(object):
         This is the control function evaluated at time t
         """
         return np.dot(self.mixingMatrix, self[self.memory_Pointer - 1].reshape((self.mixingMatrix.shape[1],1))).flatten()
-
 
 # class Controller(object):
 #     def __init__(self, model, fs, fc, size):
