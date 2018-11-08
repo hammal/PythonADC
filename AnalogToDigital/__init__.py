@@ -7,7 +7,7 @@ if sys.platform == "darwin":
     print("System: %s" % sys.platform)
 else:
     print("Matplotlib set to PS for plattform: %s" % sys.platform)
-    matplotlib.use('PS') 
+    matplotlib.use('PS')
 
 # from .reconstruction import LeastMeanSquare
 from AnalogToDigital.reconstruction import WienerFilter
@@ -25,4 +25,4 @@ import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.evaluation as evalutation
 import AnalogToDigital.filters as filters
 
-import saveFigs
+import AnalogToDigital.saveFigs as saveFigs
