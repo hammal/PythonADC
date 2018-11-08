@@ -1,6 +1,14 @@
 """ This package contains experimental tools for examining the analog-to-digital
 converter"""
 
+import sys
+import matplotlib
+if sys.platform == "darwin":
+    print("System: %s" % sys.platform)
+else:
+    print("Matplotlib set to PS for plattform: %s" % sys.platform)
+    matplotlib.use('PS') 
+
 # from .reconstruction import LeastMeanSquare
 from AnalogToDigital.reconstruction import WienerFilter
 # from .reconstruction import WienerFilterAutomaticSystem

@@ -69,10 +69,10 @@ class SigmaDeltaPerformance(object):
         for n in range(N):
             dr[n], snr[n], thd[n], _, _ = self.Metrics(osr[n])
             esnr[n] = self.ExpectedSNR(osr[n])
-        ax.plot(osr, dr, label="DR")
-        ax.plot(osr, esnr, label="Expected SNR")
-        ax.plot(osr, snr, label="SNR")
-        ax.plot(osr, thd, label="THD")
+        ax.semilogx(osr, dr, label="DR")
+        ax.semilogx(osr, esnr, label="Expected SNR")
+        ax.semilogx(osr, snr, label="SNR")
+        ax.semilogx(osr, thd, label="THD")
         return ax
     
     def Metrics(self, OSR):
@@ -95,8 +95,8 @@ class SigmaDeltaPerformance(object):
                     THD += h["power"]
         
         noise = self.spec[noiseMask]
-        noisePower = np.sum(noise[:self.frequencyToIndex(fb)])
-        noisePower += np.mean(noise[:self.frequencyToIndex(fb)]) * np.sum(noiseMask[:self.frequencyToIndex(fb)])
+        noisePower = np.sum(noise[3:self.frequencyToIndex(fb)])
+        # noisePower += np.mean(noise[1:self.frequencyToIndex(fb)]) * np.sum(noiseMask[1:self.frequencyToIndex(fb)])
 
         DR = 10 * np.log10(1./noisePower)
         SNR = 10 * np.log10(signalPower) + DR
