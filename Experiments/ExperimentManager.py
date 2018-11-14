@@ -80,6 +80,10 @@ def estimateSNR(spectralDensity, sinusoidFrequency, N_FFT, Ts, f=None, num_signa
 
     return SNR
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> Working files (i.e. not nice clean code) for simulations and data processing
 def estimateNoiseFloor(spectralDensity, sinusoidFrequency, N_FFT, Ts):
     signal_bin = int(np.rint((Ts*sinusoidFrequency) * N_FFT))
 
@@ -559,6 +563,7 @@ def randomWalkPlusSinusoid():
 
 
 
+<<<<<<< HEAD
 def multipleInputExperiment():
     run_time_start = time.time()
 
@@ -999,3 +1004,19 @@ if __name__ == "__main__":
     # randomWalkPlusSinusoid()
 
     # main(**args)
+=======
+
+if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(description="")
+    arg_parser.add_argument("--jitterAsGaussianNoise", type=bool, default=False)
+    arg_parser.add_argument("--jitterAmount", type=float, default=0)
+    arg_parser.add_argument("--sigma_jitter", type=float, default=0)
+    arg_parser.add_argument("--sigma_noise", type=float, default=0)
+    arg_parser.add_argument("--boolSim", type=bool, default=False)
+    arg_parser.add_argument("--boolRec", type=bool, default=False)
+
+    args = vars(arg_parser.parse_args())
+
+    randomWalkPlusSinusoid()
+    # main(**args)
+>>>>>>> Working files (i.e. not nice clean code) for simulations and data processing
