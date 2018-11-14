@@ -1,6 +1,11 @@
 """ This file contains various objects for describing the system """
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
+if sys.version_info >= (3,0):
+    import _pickle as cPickle
+else:
+    import cPickle
 
 class Input(object):
     """
@@ -149,6 +154,12 @@ class Control(object):
             self.offsets = options['offsets']
         else:
             self.offsets = np.zeros(mixingMatrix.shape[1])
+        
+        if 'name' in options:
+            print("Using name: %s, for storage" % options['name'])
+            self.name = options['name']
+        else:
+            self.name = 'default'
 
     def __getitem__(self, item):
         """
@@ -173,6 +184,20 @@ class Control(object):
         This is the control function evaluated at time t
         """
         return np.dot(self.mixingMatrix, self[self.memory_Pointer - 1].reshape((self.mixingMatrix.shape[1],1))).flatten()
+
+    def save(self):
+        """save class as self.name.txt"""
+        file = open(self.name+'.txt','w')
+        file.write(cPickle.dumps(self.__dict__))
+        file.close()
+
+    def load(self):
+        """try load self.name.txt"""
+        file = open(self.name+'.txt','r')
+        dataPickle = file.read()
+        file.close()
+
+        self.__dict__ = cPickle.loads(dataPickle)
 
 # class Controller(object):
 #     def __init__(self, model, fs, fc, size):

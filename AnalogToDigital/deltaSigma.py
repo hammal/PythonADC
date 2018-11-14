@@ -18,7 +18,7 @@ class DeltaSigma(object):
     """
 
     def __init__(self, OSR, order, nlev = 2):
-        self.nlev = [nlev]
+        self.nlev = [int(nlev)]
         self.order = order
         self.OSR = OSR
         # self.form = "CIFB"
@@ -26,7 +26,7 @@ class DeltaSigma(object):
         self.ntf = synthesizeNTF(self.order, self.OSR, opt=0)
         a, g, b, c = realizeNTF(self.ntf, self.form)
         self.ABCD = stuffABCD(a, g, b, c, self.form)
-        # print("ABCD:\n%s"% self.ABCD)
+        print("ABCD:\n%s"% self.ABCD)
 
     def simSNR(self):
         snr_pred, amp_pred, k0, k1, se = predictSNR(self.ntf, self.OSR)
@@ -65,7 +65,7 @@ class DeltaSigma(object):
         text(0.05, -10, 'SNR = %4.1fdB @ OSR = %d' % (snr, self.OSR), verticalalignment='center')
 
     def checkScale(self):
-        ABCD, umax, S = scaleABCD(self.ABCD, nlev = self.nlev[0])
+        ABCD, umax, S = scaleABCD(self.ABCD, nlev = int(self.nlev[0]))
         self.ABCD = ABCD
         self.umax = umax
         self.S = S

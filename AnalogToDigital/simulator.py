@@ -71,20 +71,21 @@ class Simulator(object):
                         input += signal.fun(timeInstance)
 
                 return hom + control + input
-
-            def g(x, t):
-                if "noise" in self.options:
-                    # Shock Noise
-                    noise_state = np.zeros((self.system.order, len(self.options["noise"])))
-                    for i, noiseSource in enumerate(self.options['noise']):
-                        # print(noiseSource['std'])
-                        if noiseSource['std'] > 0:
-                            # std = np.sqrt(noiseSource["std"] ** 2 * (timeInstance - t0)) * noiseSource["steeringVector"]
-                            std = noiseSource["std"] * noiseSource["steeringVector"]
-                            noise_state[:, i]= std
-                            # noise_state += (np.random.rand() - 0.5 ) * 2 * std
+            if "noise" in self.options:
+                 # Shock Noise
+                noise_state = np.zeros((self.system.order, len(self.options["noise"])))
+                for i, noiseSource in enumerate(self.options['noise']):
+                    # print(noiseSource['std'])
+                    if noiseSource['std'] > 0:
+                        # std = np.sqrt(noiseSource["std"] ** 2 * (timeInstance - t0)) * noiseSource["steeringVector"]
+                        std = noiseSource["std"] * noiseSource["steeringVector"]
+                        noise_state[:, i]= std
+                        # noise_state += (np.random.rand() - 0.5 ) * 2 * std   
+                def g(x, t):
                     return noise_state
-                else:
+                   
+            else:
+                def g(x,t):
                     return np.zeros((self.system.order, 1))
 
             # Solve ordinary differential equation

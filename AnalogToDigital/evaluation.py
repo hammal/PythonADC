@@ -26,34 +26,75 @@ class SigmaDeltaPerformance(object):
         self.freq, self.spec = self.powerSpectralDensity()
         self.fIndex = self.findMax(self.spec)
         self.f = self.fIndex * self.fs / (2. * self.N)
-        print("f: %s" % self.f)
+        # print("f: %s" % self.f)
         self.harmonics, self.harmonicDistortion = self.computeHarmonics()
         # print(self.harmonics)
 
-    def PlotPowerSpectralDensity(self, ax = None):
+    def PlotPowerSpectralDensity(self, ax = None, seperate=False, theoreticalComparision = False, label=""):
+
         if not ax:
             fig, ax = plt.subplots()
-        
-        noiseMask = np.ones_like(self.spec, dtype=bool)
+        if seperate:
+            noiseMask = np.ones_like(self.spec, dtype=bool)
 
-        for h in self.harmonics:
-            if h["power"] > 0:
-                # print(h["support"])
-                noiseMask[h["support"]] = False
-        ax.semilogx(self.freq, 10 * np.log10(self.spec))
-        ax.semilogx(self.freq[noiseMask], 10 * np.log10(self.spec[noiseMask]), color='b', label = "noise")
-        for h in self.harmonics:
-            ax.semilogx(self.freq[h['support']], 10 * np.log10(self.spec[h['support']]), "-*", color='r', label="h%i" % h['number'])
+            for h in self.harmonics:
+                if h["power"] > 0:
+                    # print(h["support"])
+                    noiseMask[h["support"]] = False
+            ax.semilogx(self.freq[noiseMask], 10 * np.log10(self.spec[noiseMask]), label = label + "_noise")
+            for h in self.harmonics:
+                if h["power"] > 0:
+                    ax.semilogx(self.freq[h['support']], 10 * np.log10(self.spec[h['support']]), "-*", label=label + "_h%i" % h['number'])
+        else:
+            # print(self.spec.shape)
+            ax.semilogx(self.freq, 10 * np.log10(self.spec), label=label)
+
+        # This is nonsense. The relation between these two should be different by one power of magnitude
+        # since the SNR is the integral of the power spectral density.
+        # if theoreticalComparision:
+        #     steps = 2**(np.arange(np.log2(self.OSR)))
+        #     values = np.zeros(steps.size)
+        #     for i,osr in enumerate(steps):
+        #         values[i] = self.ExpectedSNR(osr)
+        #     ax.semilogx(steps, values, "+-", label="Theoretical Reference")
         return ax
 
     def findMax(self, arg):
         """
         findMax returns the index for the peak of arg
         """
-        return np.argmax(arg)
+        range = np.int(self.fs / np.float(2 * self.OSR) * self.N)
+        return np.argmax(arg[:range])
 
+    def PlotPerformance(self, ax=None, SNR=True, DR=False, ESNR=False, THD=False):
+        if not ax:
+            fig, ax = plt.subplots()
+        # N = np.int(np.log2(OSRMax * 2))
+        # osr = 2 ** np.arange(N)
+        N = 100
+        f = np.logspace(-5,np.log10(0.5), N)
+        dr = np.zeros(N)
+        snr = np.zeros(N)
+        esnr = np.zeros(N)
+        thd = np.zeros(N)
 
-    def PlotPerformanceOSR(self, ax=None, OSRMax = 256):
+        for n in range(N):
+            dr[n], snr[n], thd[n], _, _ = self.Metrics(0.5/f[n])
+            esnr[n] = self.ExpectedSNR(0.5/f[n])
+        
+        if SNR:
+            ax.semilogx(f, snr, label="SNR")
+        if DR:
+            ax.semilogx(f, dr, label="DR")
+        if ESNR:
+            ax.semilogx(f, esnr, label="Expected SNR")
+        if THD:
+            ax.semilogx(f, thd, label="THD")
+        ax.set_xlabel("Normalized Frequency")
+        ax.set_ylabel("dB")
+        return ax
+
+    def PlotPerformanceOSR(self, ax=None, OSRMax = 256, SNR=True, DR=False, ESNR=False, THD=False):
         if not ax:
             fig, ax = plt.subplots()
         # N = np.int(np.log2(OSRMax * 2))
@@ -69,35 +110,43 @@ class SigmaDeltaPerformance(object):
         for n in range(N):
             dr[n], snr[n], thd[n], _, _ = self.Metrics(osr[n])
             esnr[n] = self.ExpectedSNR(osr[n])
-        ax.semilogx(osr, dr, label="DR")
-        ax.semilogx(osr, esnr, label="Expected SNR")
-        ax.semilogx(osr, snr, label="SNR")
-        ax.semilogx(osr, thd, label="THD")
+        if SNR:
+            ax.plot(osr, snr, label="SNR")
+        if DR: 
+            ax.plot(osr, dr, label="DR")
+        if ESNR:
+            ax.plot(osr, esnr, label="Expected SNR")
+        if THD:
+            ax.plot(osr, thd, label="THD")
+        ax.set_ylabel("dB")
+        ax.set_xlabel("OSR")
         return ax
     
     def Metrics(self, OSR):
         epsilon = 1e-18
         if OSR < 1:
             raise "Non valid oversampling rate"
-        fb = self.fs / np.float(2 * OSR)
-
+        fb = np.int(self.fs / np.float(2 * OSR) * self.N)
+      
         noiseMask = np.ones_like(self.spec, dtype=bool)
 
 
         THD = 0.
         signalPower = epsilon
         for h in self.harmonics:
-            if h["power"] > 0 and h["f"] <= fb:
+            if h["power"] > 0:
                 noiseMask[h["support"]] = False
                 if h["number"] == 1:
                     signalPower = h['power']
-                else:
+                elif h["fIndex"] <= fb:
                     THD += h["power"]
         
         noise = self.spec[noiseMask]
-        noisePower = np.sum(noise[3:self.frequencyToIndex(fb)])
-        # noisePower += np.mean(noise[1:self.frequencyToIndex(fb)]) * np.sum(noiseMask[1:self.frequencyToIndex(fb)])
+        startOffset = 3
+        noisePower = np.sum(noise[startOffset:fb])
+        noisePower += np.mean(noise[startOffset:fb]) * np.sum(noiseMask[startOffset:fb])
 
+        # print(signalPower)
         DR = 10 * np.log10(1./noisePower)
         SNR = 10 * np.log10(signalPower) + DR
         THD = 10 * np.log10(THD/signalPower)
@@ -113,12 +162,15 @@ class SigmaDeltaPerformance(object):
     def computeHarmonics(self):
         # print(f)
         fIndex = self.fIndex
+        if fIndex == 0:
+            fIndex = 1
         number = 1
         harmonics = []
         harmonicDistortion = []
+        # print(self.N)
         while fIndex < self.N / 2.:
             # print(f)
-            harmonic, support = self.peakSupport(self.fIndex)
+            harmonic, support = self.peakSupport(fIndex)
             if harmonic:
                 power = np.sum(self.spec[support])
             else:
@@ -126,19 +178,20 @@ class SigmaDeltaPerformance(object):
                 support = None
             harmonics.append(
                 {   
-                    "f": fIndex,
+                    "fIndex": fIndex,
                     "number": number,
                     "power": power,
                     "support": support,
                 }
-            )
-
+            ) 
             if number == 1:
                 harmonicDistortion.append(np.sqrt(power))
             else:
                 harmonicDistortion.append(np.sqrt(power / harmonicDistortion[0]))
             number += 1
-            fIndex *= 2.
+            fIndex *= 2
+        # print("Harmonics:")
+        # print(harmonics)
 
         harmonicDistortion = np.array(harmonicDistortion)
         return harmonics, harmonicDistortion
@@ -147,7 +200,7 @@ class SigmaDeltaPerformance(object):
         """
         Compute Power-spectral density
         """
-        self.N = 256 * self.OSR
+        self.N = min([256 * self.OSR, self.estimate.shape[0]])
         window = 'hanning'
 
         wind = np.hanning(self.N)
@@ -162,7 +215,7 @@ class SigmaDeltaPerformance(object):
 
         # spectrum = np.abs(np.fft.fft(self.estimate[:self.N] * wind, axis=0, n = self.N)) ** 2 
         # spectrum = spectrum[:self.N/2]
-        freq = np.fft.fftfreq(self.N)[:self.N/2]
+        # freq = np.fft.fftfreq(self.N)[:self.N/2]
         # spectrum /= (self.N / 2) * (self.fs / 2)
         freq, spectrum = scipy.signal.welch(self.estimate, fs=1.0, window=window, nperseg=self.N, noverlap=None, nfft=None, return_onesided=True, scaling='spectrum', axis=0)
         # spectrum /= (FullScale / 4. * w1) ** 2
@@ -178,15 +231,17 @@ class SigmaDeltaPerformance(object):
         """
         Checks if there is peak at f and returns its support
         """
-        localPathSize = 200
-        maxPeakNeighbor = 20
-        midIndex = fIndex
+        localPathSize = np.int(100)
+        maxPeakNeighbor = np.int(20)
+        midIndex = np.int(fIndex)
         # print("Peak Index: %s" % midIndex)
         lowerIndexBound = np.minimum(localPathSize, midIndex)
         upperIndexBound = np.minimum(localPathSize, self.spec.size - midIndex - 1)
+        # print(lowerIndexBound, upperIndexBound, midIndex)
         tempSpec = self.spec[midIndex - lowerIndexBound:midIndex + upperIndexBound]
         # index = (upperIndexBound - lowerIndexBound) / 2
         index = lowerIndexBound - 1
+        # print(tempSpec)
         peakHeight = tempSpec[index]
         avgHeight = (np.mean(tempSpec[:index]) + np.mean(tempSpec[index+1:])) / 2.
         maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
