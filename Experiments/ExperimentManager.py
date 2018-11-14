@@ -986,4 +986,6 @@ if __name__ == "__main__":
     piBlockSystem()
     # multipleInputExperiment()
     # randomWalkPlusSinusoid()
+
+    randomWalkPlusSinusoid()
     # main(**args)
