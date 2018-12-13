@@ -19,12 +19,12 @@ class Simulator(object):
         self.control = control
 
         # Set the inital state
-        if not initalState:
+        if type(initalState) is np.ndarray:
+            self.state = initalState.reshape((system.order,))
+        else:
             # self.state = np.zeros(system.order)
             self.state = np.random.randint(2, size=system.order) * 2. - 1.
             print("Initial state set: %s" % self.state)
-        else:
-            self.state = initalState.reshape((system.order,))
 
         self.options = options
 

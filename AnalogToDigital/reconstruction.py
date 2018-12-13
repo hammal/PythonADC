@@ -1,4 +1,4 @@
-""" This file contains various reconstruction implementatons """
+""" This file contains various reconstruction implementations """
 
 import numpy as np
 import scipy.linalg
@@ -651,7 +651,7 @@ class DiscreteTimeKalmanFilterWithBoundedOutput(DiscreteTimeKalmanFilter):
         mf = np.zeros((self.order, control.size),dtype=np.float)
         Vf = [np.eye(self.order, dtype=np.float) * 1e15] * control.size
         G = [np.eye(self.system.outputOrder, dtype=np.float)] * control.size
-        F = [np.zeros((self.order, self.order), dtype=np.float)]* control.size
+        F = [np.zeros((self.order, self.order), dtype=np.float)] * control.size
         xi = np.zeros_like(mf, dtype=np.float)
         W_tilde = [np.zeros((self.order, self.order),dtype=np.float)] * control.size
         observation = [np.zeros(self.system.outputOrder,dtype=np.float)] * control.size
@@ -697,7 +697,8 @@ class DiscreteTimeKalmanFilterWithBoundedOutput(DiscreteTimeKalmanFilter):
                     u[index+1] = -np.dot(self.w, xi[:, index])
                     # u[index] = -np.dot(self.w, xi[:, index])
 
-        for round in range(control.size):
+        # for round in range(control.size):
+        for round in range(100):
             ordering = np.random.choice(control.size, control.size, replace=False)
             messagePassing()
             for time in range(control.size):

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 if sys.version_info >= (3,0):
-    import _pickle as cPickle
+    import pickle as cPickle
 else:
     import cPickle
 
@@ -96,6 +96,8 @@ class System(object):
         """
         self.A = np.array(A, dtype=np.float64)
         self.c = np.array(c, dtype=np.float64)
+        # self.b = np.zeros(self.A.shape[0])
+        # self.b[0] = 1.
 
         self.order = self.A.shape[0]
         self.outputOrder = self.c.shape[0]
@@ -105,7 +107,10 @@ class System(object):
 
     def frequencyResponse(self, frequency):
         s = np.complex(0, 2. * np.pi * frequency)
-        return np.linalg.inv(s * np.eye(self.order) - self.A)
+        try:
+            return np.dot(self.c, np.linalg.inv(s * np.eye(self.order) - self.A))
+        except np.linalg.LinAlgError:
+            return np.dot(self.c, np.linalg.pinv(s * np.eye(self.order) - self.A))
 
     def output(self, state):
         """
@@ -187,13 +192,13 @@ class Control(object):
 
     def save(self):
         """save class as self.name.txt"""
-        file = open(self.name+'.txt','w')
+        file = open(self.name+'.txt','wb')
         file.write(cPickle.dumps(self.__dict__))
         file.close()
 
     def load(self):
         """try load self.name.txt"""
-        file = open(self.name+'.txt','r')
+        file = open(self.name+'.txt','rb')
         dataPickle = file.read()
         file.close()
 

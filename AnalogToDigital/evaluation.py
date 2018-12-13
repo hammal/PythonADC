@@ -3,6 +3,51 @@ from scipy import signal
 import scipy
 import matplotlib.pyplot as plt
 
+class SNRvsAmplitude(object):
+    """
+    This is a helper class for plotting SNR vs input power
+    """
+
+    def __init__(self, system, estimates):
+        self.estimates = []
+        self.system = system
+        index = 0
+        for est in estimates:
+            self.estimates.append(
+                {
+                    "estimates": est,
+                    "performance": SigmaDeltaPerformance(system, est),
+                    "inputPower": np.var(est.flatten()) / (1.25 ** 2 / 2.)
+                }
+            )
+            index += 1
+        self.size = index
+
+    def PlotInputPowerVsSNR(self, OSR, ax=False):
+        inputPower = np.zeros(self.size)
+        SNR = np.zeros_like(inputPower)
+        TSNR = np.zeros_like(inputPower)
+        SNRTheoretical = np.zeros_like(inputPower)
+        for index in range(self.size):
+            inputPower[index] = self.estimates[index]["inputPower"]
+            DR, SNR[index], THD, THDN, ENOB, TSNR[index] = self.estimates[index]["performance"].Metrics(OSR)
+            SNRTheoretical[index] = self.theoreticalPerformance(inputPower[index] * (1.25 ** 2 / 2.), OSR=OSR)
+        sortMask = np.argsort(inputPower)
+        if not ax:
+                fig, ax = plt.subplots()
+        ax.plot(10 * np.log10(inputPower[sortMask]), SNRTheoretical[sortMask], label="theoretical")
+        ax.plot(10 * np.log10(inputPower[sortMask]), TSNR[sortMask], label="theoretical measured")
+        ax.plot(10 * np.log10(inputPower[sortMask]), SNR[sortMask], label="measured")
+        ax.legend()
+        ax.set_xlabel("Input Power dBFS")
+        ax.set_ylabel("SNR dB")
+        return ax
+
+    def theoreticalPerformance(self,inputPower, OSR):
+        return 10 * np.log10(inputPower * 12 * (2 * self.system.order + 1) * OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
+
+
+
 NUMBER_OF_POINTS = 1000
 
 class SigmaDeltaPerformance(object):
@@ -24,6 +69,7 @@ class SigmaDeltaPerformance(object):
         self.estimate = estimate.flatten()
         self.estimate -= np.mean(self.estimate)
         self.freq, self.spec = self.powerSpectralDensity()
+        self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq)
         self.fIndex = self.findMax(self.spec)
         self.f = self.fIndex * self.fs / (2. * self.N)
         # print("f: %s" % self.f)
@@ -59,27 +105,39 @@ class SigmaDeltaPerformance(object):
         #     ax.semilogx(steps, values, "+-", label="Theoretical Reference")
         return ax
 
+    def theoreticalNoiseTransferFunction(self, freqs):
+        """
+        Reference Transferfunction
+        """
+        systemResponse = lambda f: np.dot(self.system.frequencyResponse(f), self.system.b)
+        Tf = lambda f: np.dot(np.conj(np.transpose(systemResponse(f))), np.linalg.pinv(np.outer(systemResponse(f), systemResponse(f).conj())))
+        
+        noisePowerSpectralDensity = np.zeros_like(freqs)
+        for i,f in enumerate(freqs):
+            noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2
+        return noisePowerSpectralDensity
+
     def findMax(self, arg):
         """
         findMax returns the index for the peak of arg
         """
         range = np.int(self.fs / np.float(2 * self.OSR) * self.N)
-        return np.argmax(arg[:range])
+        return np.argmax(arg[:range+5])
 
     def PlotPerformance(self, ax=None, SNR=True, DR=False, ESNR=False, THD=False):
         if not ax:
             fig, ax = plt.subplots()
         # N = np.int(np.log2(OSRMax * 2))
         # osr = 2 ** np.arange(N)
-        N = 100
-        f = np.logspace(-5,np.log10(0.5), N)
+        N = 500
+        f = np.logspace(-3,np.log10(0.5), N)
         dr = np.zeros(N)
         snr = np.zeros(N)
         esnr = np.zeros(N)
         thd = np.zeros(N)
 
         for n in range(N):
-            dr[n], snr[n], thd[n], _, _ = self.Metrics(0.5/f[n])
+            dr[n], snr[n], thd[n], _, _, _ = self.Metrics(0.5/f[n])
             esnr[n] = self.ExpectedSNR(0.5/f[n])
         
         if SNR:
@@ -99,7 +157,7 @@ class SigmaDeltaPerformance(object):
             fig, ax = plt.subplots()
         # N = np.int(np.log2(OSRMax * 2))
         # osr = 2 ** np.arange(N)
-        N = 100
+        N = 500
         osr = np.logspace(0, np.log2(OSRMax), num=N, base=2.)
         # print(osr)
         dr = np.zeros(N)
@@ -108,7 +166,7 @@ class SigmaDeltaPerformance(object):
         thd = np.zeros(N)
         
         for n in range(N):
-            dr[n], snr[n], thd[n], _, _ = self.Metrics(osr[n])
+            dr[n], snr[n], thd[n], _, _, _ = self.Metrics(osr[n])
             esnr[n] = self.ExpectedSNR(osr[n])
         if SNR:
             ax.plot(osr, snr, label="SNR")
@@ -133,25 +191,33 @@ class SigmaDeltaPerformance(object):
 
         THD = 0.
         signalPower = epsilon
+        support = 0 
         for h in self.harmonics:
-            if h["power"] > 0:
+            # print(h["fIndex"] , fb)
+            if h["power"] > 0 and (h["fIndex"]) <= fb :
                 noiseMask[h["support"]] = False
                 if h["number"] == 1:
                     signalPower = h['power']
-                elif h["fIndex"] <= fb:
+                    support = len(h['support'])
+                else:
                     THD += h["power"]
         
         noise = self.spec[noiseMask]
-        startOffset = 3
+        # print(noise.size, fb)
+        startOffset = 5
         noisePower = np.sum(noise[startOffset:fb])
-        noisePower += np.mean(noise[startOffset:fb]) * np.sum(noiseMask[startOffset:fb])
+        # noisePower = np.sum(noise[startOffset:fb - support/2])
+        # noisePower += np.mean(noise[startOffset:fb]) * (support + startOffset)
+        # noisePower = np.mean(noise[startOffset:fb]) * (fb)
 
-        # print(signalPower)
+        # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
         SNR = 10 * np.log10(signalPower) + DR
-        THD = 10 * np.log10(THD/signalPower)
-        THDN = 10 * np.log10((THD + noisePower)/signalPower)
-        return DR, SNR, THD, THDN, self.ENOB(DR)
+        THD = 10 * np.log10(THD / signalPower)
+        THDN = 10 * np.log10((THD + noisePower) / signalPower)
+
+        theoreticalSNR = 10 * np.log10(signalPower/np.sum(self.theoreticalSpec[startOffset:fb])) - 363
+        return DR, SNR, THD, THDN, self.ENOB(DR), theoreticalSNR
 
     def ENOB(self, DR):
         return (DR - 1.76) / 6.02
@@ -200,7 +266,7 @@ class SigmaDeltaPerformance(object):
         """
         Compute Power-spectral density
         """
-        self.N = min([256 * self.OSR, self.estimate.shape[0]])
+        self.N = min([256 * 4 * self.OSR, self.estimate.shape[0]])
         window = 'hanning'
 
         wind = np.hanning(self.N)
@@ -231,8 +297,10 @@ class SigmaDeltaPerformance(object):
         """
         Checks if there is peak at f and returns its support
         """
-        localPathSize = np.int(100)
-        maxPeakNeighbor = np.int(20)
+        # print("PeakSupport:")
+        localPathSize = np.int(1000)
+        maxPeakNeighbor = np.int(4)
+        maxPeakNeighbor = np.int(80)     
         midIndex = np.int(fIndex)
         # print("Peak Index: %s" % midIndex)
         lowerIndexBound = np.minimum(localPathSize, midIndex)
@@ -245,14 +313,19 @@ class SigmaDeltaPerformance(object):
         peakHeight = tempSpec[index]
         avgHeight = (np.mean(tempSpec[:index]) + np.mean(tempSpec[index+1:])) / 2.
         maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
+        diff = 1
         for offset in range(1, np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
             # print(avgHeight, peakHeight)
-            if peakHeight / avgHeight > maxRange["value"]:
+            # if peakHeight / avgHeight > 4 * maxRange["value"]:
+            # print(diff)
+            if diff > 1e-9:
                 maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
                 maxRange["value"] = peakHeight / avgHeight 
                 # print(maxRange["value"])
-            peakHeight += tempSpec[index + offset] + tempSpec[index - offset] 
-            avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
+            diff = np.abs(tempSpec[index + offset] + tempSpec[index - offset])
+            # print(diff)
+            peakHeight += tempSpec[index + offset] + tempSpec[index - offset]
+            # avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
 
         if maxRange["value"] > 4:
             return True, maxRange["range"]
@@ -262,7 +335,7 @@ class SigmaDeltaPerformance(object):
 
 class Evaluation(object):
     """
-    This is a helper class for establishing concistent figures of merit.
+    This is a helper class for establishing consistent figures of merit.
 
 
     - Frequency spectrum
@@ -418,7 +491,8 @@ class Evaluation(object):
         refSpec =  [np.abs(np.fft.fft(x.scalarFunction(t) * window, axis=0, n = N)) ** 2 / N for x in self.references]
         inputSpec = np.abs(np.fft.fft(self.estimates * window.reshape((window.size, 1)) * np.ones_like(self.estimates), axis=0, n = N)) ** 2 / ((N / 2) * (fs / 2)) 
         freq = np.fft.fftfreq(N, d=Ts)
-        return freq[:N/2], inputSpec[:N/2], refSpec[:N/2]
+        to = int(N/2)
+        return freq[:to], inputSpec[:to], refSpec[:to]
 
     def findMaxAndMean(self, array):
         offset = 30
@@ -505,6 +579,6 @@ class Evaluation(object):
 
         ase = np.linalg.norm(estimates_Truncated - references_Truncated, axis=0)**2 / estimates_Truncated.shape[0]
 
-        raise NotImplemented
+        # raise NotImplemented
         #TODO account for amplitude missmatch from ripple in filter
         return ase
