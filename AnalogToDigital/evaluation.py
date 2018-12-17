@@ -360,9 +360,9 @@ class SigmaDeltaPerformance(object):
         
     def ToTextFile(self, filename, OSR = 32):
         _, _, _, _, _, _ = self.Metrics(OSR)
-        signal = np.zeros((self.freq.size))
-        harmonics = np.zeros_like(signal)
-        noise = np.zeros_like(signal)
+        signal = np.ones((self.freq.size)) * 1e-10
+        harmonics = np.copy(signal)
+        noise = np.copy(signal)
 
         signal[self.signalMask] = self.spec[self.signalMask]
         harmonics[self.harmonicMask] = self.spec[self.harmonicMask]
