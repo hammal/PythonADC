@@ -292,7 +292,7 @@ class SigmaDeltaPerformance(object):
         """
         Compute Power-spectral density
         """
-        self.N = min([256 * 4 * self.OSR, self.estimate.shape[0]])
+        self.N = min([256 * 2 * self.OSR, self.estimate.shape[0]])
         window = 'hanning'
 
         wind = np.hanning(self.N)
