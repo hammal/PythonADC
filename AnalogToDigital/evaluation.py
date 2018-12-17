@@ -213,7 +213,7 @@ class SigmaDeltaPerformance(object):
         self.signalMask = np.zeros_like(self.harmonicMask, dtype=bool)
 
 
-        THD = 0.
+        thd = 0.
         signalPower = epsilon
         support = 0 
         for h in self.harmonics:
@@ -225,7 +225,7 @@ class SigmaDeltaPerformance(object):
                     support = len(h['support'])
                     self.signalMask[h["support"]] = True
                 else:
-                    THD += h["power"]
+                    thd += h["power"]
                     self.harmonicMask[h["support"]] = True
         
         noise = self.spec[noiseMask]
@@ -240,8 +240,8 @@ class SigmaDeltaPerformance(object):
         # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
         SNR = 10 * np.log10(signalPower) + DR
-        THD = 10 * np.log10(THD / signalPower)
-        THDN = 10 * np.log10((THD + noisePower) / signalPower)
+        THD = 10 * np.log10(thd / signalPower)
+        THDN = 10 * np.log10((thd + noisePower) / signalPower)
 
         theoreticalSNR = 10 * np.log10(signalPower/np.sum(self.theoreticalSpec[startOffset:fb])) - 363
         return DR, SNR, THD, THDN, self.ENOB(DR), theoreticalSNR
