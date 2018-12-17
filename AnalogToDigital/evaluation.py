@@ -340,6 +340,7 @@ class SigmaDeltaPerformance(object):
         avgHeight = (np.mean(tempSpec[:index]) + np.mean(tempSpec[index+1:])) / 2.
         maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
         
+        print("Mark")
         for offset in range(1,  np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
             peakChange = tempSpec[index + offset] + tempSpec[index - offset]
             peakHeight += peakChange
