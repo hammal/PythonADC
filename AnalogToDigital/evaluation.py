@@ -326,7 +326,7 @@ class SigmaDeltaPerformance(object):
         # print("PeakSupport:")
         localPathSize = np.int(1000)
         maxPeakNeighbor = np.int(4)
-        maxPeakNeighbor = np.int(80)     
+        maxPeakNeighbor = np.int(20)     
         midIndex = np.int(fIndex)
         # print("Peak Index: %s" % midIndex)
         lowerIndexBound = np.minimum(localPathSize, midIndex)
@@ -345,7 +345,7 @@ class SigmaDeltaPerformance(object):
             peakHeight += peakChange
             avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
             diff = np.abs(peakChange - avgHeight)**2/avgHeight**2
-            print(diff)
+            print(diff, offset)
             if diff < 1.:
                 break
             maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
