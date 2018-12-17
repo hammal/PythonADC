@@ -8,7 +8,7 @@ class SNRvsAmplitude(object):
     This is a helper class for plotting SNR vs input power
     """
 
-    def __init__(self, system, estimates):
+    def __init__(self, system, estimates, OSR=32):
         self.estimates = []
         self.system = system
         index = 0
@@ -22,13 +22,12 @@ class SNRvsAmplitude(object):
             )
             index += 1
         self.size = index
-        self.sortAndMake()
+        self.sortAndMake(OSR)
     
-    def sortAndMake(self):
+    def sortAndMake(self, OSR):
         """
         Compute and make the SNR vs input amplitude plots
         """
-        OSR = 32
         self.snrVsAmp = np.zeros((len(self.estimates), 5))
         for index, est in enumerate(self.estimates):
             # self.snrVsAmp[index,1] is SNR
