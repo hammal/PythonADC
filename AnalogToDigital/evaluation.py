@@ -29,12 +29,13 @@ class SNRvsAmplitude(object):
         Compute and make the SNR vs input amplitude plots
         """
         OSR = 32
-        self.snrVsAmp = np.zeros((len(self.estimates), 4))
+        self.snrVsAmp = np.zeros((len(self.estimates), 5))
         for index, est in enumerate(self.estimates):
             # self.snrVsAmp[index,1] is SNR
             # self.snrVsAmp[index,2] is TSNR (Theoretical measured)
             # self.snrVsAmp[index,3] is Theoretical SNR computed
-            DR, self.snrVsAmp[index,1], THD, THDN, ENOB, self.snrVsAmp[index,2] = est["performance"].Metrics(OSR)
+            # self.snrVsAmp[index,4] Total Harmonic distortion and noise
+            DR, self.snrVsAmp[index,1], THD, self.snrVsAmp[index,4], ENOB, self.snrVsAmp[index,2] = est["performance"].Metrics(OSR)
             self.snrVsAmp[index, 0] = est["inputPower"]
             self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (1.25 ** 2 / 2.), OSR=OSR)
         shuffleMask = np.argsort(self.snrVsAmp[:,0])
@@ -42,7 +43,7 @@ class SNRvsAmplitude(object):
 
 
     def ToTextFile(self, filename):
-        description = ["IP", "SNR", "TMSNR", "TSNR"]
+        description = ["IP", "SNR", "TMSNR", "TSNR", "THDN"]
         np.savetxt(filename, self.snrVsAmp, delimiter=', ', header=", ".join(description), comments='')
 
     def PlotInputPowerVsSNR(self, OSR, ax=False):
@@ -233,7 +234,7 @@ class SigmaDeltaPerformance(object):
         startOffset = 5
         noisePower = np.sum(noise[startOffset:fb])
         # noisePower = np.sum(noise[startOffset:fb - support/2])
-        # noisePower += np.mean(noise[startOffset:fb]) * (support + startOffset)
+        noisePower += np.mean(noise[startOffset:fb]) * (support + startOffset)
         # noisePower = np.mean(noise[startOffset:fb]) * (fb)
 
         # print(signalPower, noisePower, OSR)
