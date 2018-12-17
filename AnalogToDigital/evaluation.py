@@ -344,9 +344,9 @@ class SigmaDeltaPerformance(object):
             peakChange = tempSpec[index + offset] + tempSpec[index - offset]
             peakHeight += peakChange
             avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
-            diff = np.abs(peakChange - avgHeight)**2/avgHeight**2
+            diff = np.abs(peakChange/2. - avgHeight)**2/avgHeight**2
             print(diff, offset)
-            if diff < 1.:
+            if diff < .1:
                 break
             maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
             maxRange["value"] = peakHeight / avgHeight 
