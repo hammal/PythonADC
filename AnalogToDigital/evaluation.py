@@ -22,22 +22,44 @@ class SNRvsAmplitude(object):
             )
             index += 1
         self.size = index
+        self.sortAndMake()
+    
+    def sortAndMake(self):
+        """
+        Compute and make the SNR vs input amplitude plots
+        """
+        OSR = 32
+        self.snrVsAmp = np.zeros((len(self.estimates), 4))
+        for index, est in enumerate(self.estimates):
+            # self.snrVsAmp[index,1] is SNR
+            # self.snrVsAmp[index,2] is TSNR (Theoretical measured)
+            # self.snrVsAmp[index,3] is Theoretical SNR computed
+            DR, self.snrVsAmp[index,1], THD, THDN, ENOB, self.snrVsAmp[index,2] = est["performance"].Metrics(OSR)
+            self.snrVsAmp[index, 0] = est["inputPower"]
+            self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (1.25 ** 2 / 2.), OSR=OSR)
+        shuffleMask = np.argsort(self.snrVsAmp[:,0])
+        self.snrVsAmp = self.snrVsAmp[shuffleMask,:]
+
+
+    def ToTextFile(self, filename):
+        description = ["IP", "SNR", "TMSNR", "TSNR"]
+        np.savetxt(filename, self.snrVsAmp, delimiter=', ', header=", ".join(description), comments='')
 
     def PlotInputPowerVsSNR(self, OSR, ax=False):
-        inputPower = np.zeros(self.size)
-        SNR = np.zeros_like(inputPower)
-        TSNR = np.zeros_like(inputPower)
-        SNRTheoretical = np.zeros_like(inputPower)
-        for index in range(self.size):
-            inputPower[index] = self.estimates[index]["inputPower"]
-            DR, SNR[index], THD, THDN, ENOB, TSNR[index] = self.estimates[index]["performance"].Metrics(OSR)
-            SNRTheoretical[index] = self.theoreticalPerformance(inputPower[index] * (1.25 ** 2 / 2.), OSR=OSR)
-        sortMask = np.argsort(inputPower)
+        # inputPower = np.zeros(self.size)
+        # SNR = np.zeros_like(inputPower)
+        # TSNR = np.zeros_like(inputPower)
+        # SNRTheoretical = np.zeros_like(inputPower)
+        # for index in range(self.size):
+        #     inputPower[index] = self.estimates[index]["inputPower"]
+        #     DR, SNR[index], THD, THDN, ENOB, TSNR[index] = self.estimates[index]["performance"].Metrics(OSR)
+        #     SNRTheoretical[index] = self.theoreticalPerformance(inputPower[index] * (1.25 ** 2 / 2.), OSR=OSR)
+        # sortMask = np.argsort(inputPower)
         if not ax:
                 fig, ax = plt.subplots()
-        ax.plot(10 * np.log10(inputPower[sortMask]), SNRTheoretical[sortMask], label="theoretical")
-        ax.plot(10 * np.log10(inputPower[sortMask]), TSNR[sortMask], label="theoretical measured")
-        ax.plot(10 * np.log10(inputPower[sortMask]), SNR[sortMask], label="measured")
+        ax.plot(10 * np.log10(self.snrVsAmp[:,0]), self.snrVsAmp[:,3], label="theoretical")
+        ax.plot(10 * np.log10(self.snrVsAmp[:,0]), self.snrVsAmp[:,2], label="theoretical measured")
+        ax.plot(10 * np.log10(self.snrVsAmp[:,0]), self.snrVsAmp[:,1], label="measured")
         ax.legend()
         ax.set_xlabel("Input Power dBFS")
         ax.set_ylabel("SNR dB")
@@ -111,7 +133,6 @@ class SigmaDeltaPerformance(object):
         """
         systemResponse = lambda f: np.dot(self.system.frequencyResponse(f), self.system.b)
         Tf = lambda f: np.dot(np.conj(np.transpose(systemResponse(f))), np.linalg.pinv(np.outer(systemResponse(f), systemResponse(f).conj())))
-        
         noisePowerSpectralDensity = np.zeros_like(freqs)
         for i,f in enumerate(freqs):
             noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2
@@ -187,6 +208,8 @@ class SigmaDeltaPerformance(object):
         fb = np.int(self.fs / np.float(2 * OSR) * self.N)
       
         noiseMask = np.ones_like(self.spec, dtype=bool)
+        self.harmonicMask = np.zeros_like(noiseMask, dtype=bool)
+        self.signalMask = np.zeros_like(self.harmonicMask, dtype=bool)
 
 
         THD = 0.
@@ -199,10 +222,13 @@ class SigmaDeltaPerformance(object):
                 if h["number"] == 1:
                     signalPower = h['power']
                     support = len(h['support'])
+                    self.signalMask[h["support"]] = True
                 else:
                     THD += h["power"]
+                    self.harmonicMask[h["support"]] = True
         
         noise = self.spec[noiseMask]
+        self.noiseMask = noiseMask
         # print(noise.size, fb)
         startOffset = 5
         noisePower = np.sum(noise[startOffset:fb])
@@ -331,7 +357,36 @@ class SigmaDeltaPerformance(object):
             return True, maxRange["range"]
         else:
             return False, np.array([])
+        
+    def ToTextFile(self, filename, OSR = 32):
+        _, _, _, _, _, _ = self.Metrics(OSR)
+        signal = np.zeros((self.freq.size))
+        harmonics = np.zeros_like(signal)
+        noise = np.zeros_like(signal)
 
+        signal[self.signalMask] = self.spec[self.signalMask]
+        harmonics[self.harmonicMask] = self.spec[self.harmonicMask]
+        noise[self.noiseMask] = self.spec[self.noiseMask]
+
+        data = np.zeros((self.freq.size, 5))
+
+        description = ["f", "Sx", "Su", "Sh", "Sn"]
+
+        # Frequencies  
+        data[:, 0] = self.freq
+        # Power Spectral Density
+        data[:, 1] = 10 * np.log10(self.spec)
+        # Signal
+        data[:, 2] = 10 * np.log10(signal)
+        # Harmonics
+        data[:, 3] = 10 * np.log10(harmonics)
+        # Noise
+        data[:, 4] = 10 * np.log10(noise)
+
+        data = np.nan_to_num(data)
+
+        np.savetxt(filename, data, delimiter=', ', header=", ".join(description), comments='')
+        
 
 class Evaluation(object):
     """

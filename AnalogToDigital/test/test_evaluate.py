@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import AnalogToDigital.evaluation as evaluation
 import AnalogToDigital.filters as filters
 from scipy import signal
+import AnalogToDigital as ADC
+import AnalogToDigital.unstable_linear_filter as unstable_linear_filter
 
 def test_evaluate_PlotTransferFunctions():
     size = 10000
@@ -340,8 +342,89 @@ def test_evaluate_WithNoise():
 
     figure1 = ev_SISO.PlotTransferFunctions(freqsLim)
 
+def test_evaluate_TextToFile():
+    """
+    System specification
+    """
+    order = 5
+    frequency = 5e-3
+    #### Suspicious
+    # fs = 1./80e-6
+    # Ts = 1./fs
+    ####
+    amplitude = 1.25
+    phase = 0.
+
+
+    R = 16e3
+    RFB = 68e3
+    C = 10e-9
+    beta = -1. / (R*C)
+    betaFB = -1. / (RFB * C)
+    rho = 0.# needs to be in the left plane
+
+    Ts = int(np.floor(1./(-beta - (beta + 4 * betaFB)) * 1e6)) * 1e-6
+    print(Ts)
+    fs = 1./Ts
+
+
+    control_gain = beta #/np.sqrt(2.) * 10.
+    control_frequency = np.copy(fs)
+    bounds = 5 # 5V bound
+
+    print("Zero Gain Frequency = %0.1f" % np.abs(beta/np.pi/2.))
+    print("Expected SNR = %f" % (10 * np.log10((amplitude ** 2 / 2 * 12 / 1.25) * (2 * order + 1) * 32 ** (2 * order + 1) / ((2 * np.pi)**(2 * order)))))
+
+    """
+    System Model
+    """
+    A = np.eye(order, k=-1) * beta + np.eye(order, k=0) * rho
+    c = np.eye(order)
+    sys = ADC.system.System(A, c)
+
+    """
+    Input
+    """
+    b = np.zeros(order)
+    b[0] = beta
+
+    sys.b = b
+
+    inp = ADC.system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=b)
+
+    mixingMatrix = np.eye(order) * control_gain * 1.25 # the 1.25 comes from the control voltage
+
+    # New Feedback Structure
+    mixingMatrix[0,1:] = np.ones(order - 1) * betaFB * 1.25 # the 1.25 comes from the control voltage
+
+    data = "./AnalogToDigital/test/A0.05000-F625.adc"
+    control_memory, _, _, _  = unstable_linear_filter.ascii_to_bitarray(data, order=order)
+    size = control_memory.shape[0]
+    t = np.arange(size) * Ts
+    ctrl = ADC.system.Control(mixingMatrix, size, control_memory)
+    eta2 = 1e0
+
+    reconstruction = ADC.reconstruction.WienerFilter(t, sys, (inp,), {"eta2":np.ones(order) * eta2})
+    u_hat = reconstruction.filter(ctrl)
+
+    # if PLOTS:
+    #     plt.figure()
+    #     plt.title("Input estimations")
+    #     plt.plot(t, u, label="u")
+    #     plt.plot(t, u_hat, label="u_hat")
+    #     plt.xlabel("t")
+    #     plt.legend()
+
+
+    """
+    Evaluation
+    """
+    metrics = ADC.evaluation.SigmaDeltaPerformance(sys, u_hat)
+    
+    metrics.ToTextFile("test.csv")
 
 if __name__ == "__main__":
+    test_evaluate_TextToFile()
     test_evaluate_PlotTransferFunctions()
     # test_evaluate_PlotTransferFunctions_For_PostFiltering()
     test_evaluate_WithNoise()
