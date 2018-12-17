@@ -292,7 +292,7 @@ class SigmaDeltaPerformance(object):
         """
         Compute Power-spectral density
         """
-        self.N = min([256 * 2 * self.OSR, self.estimate.shape[0]])
+        self.N = min([256 * 1 * self.OSR, self.estimate.shape[0]])
         window = 'hanning'
 
         wind = np.hanning(self.N)
@@ -339,24 +339,38 @@ class SigmaDeltaPerformance(object):
         peakHeight = tempSpec[index]
         avgHeight = (np.mean(tempSpec[:index]) + np.mean(tempSpec[index+1:])) / 2.
         maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
-        diff = 1
-        for offset in range(1, np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
-            # print(avgHeight, peakHeight)
-            # if peakHeight / avgHeight > 4 * maxRange["value"]:
-            # print(diff)
-            if diff > 1e-9:
-                maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
-                maxRange["value"] = peakHeight / avgHeight 
-                # print(maxRange["value"])
-            diff = np.abs(tempSpec[index + offset] + tempSpec[index - offset])
-            # print(diff)
-            peakHeight += tempSpec[index + offset] + tempSpec[index - offset]
-            # avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
+        
+        for offset in range(1,  np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
+            peakChange = tempSpec[index + offset] + tempSpec[index - offset]
+            peakHeight += peakChange
+            avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
+            diff = np.abs(peakChange - avgHeight)**2
+            print(diff)
+            if diff < 1e-10:
+                break
+            maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
+            maxRange["value"] = peakHeight / avgHeight 
+        return True, maxRange["range"]
+        
+        # maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
+        # diff = 1
+        # for offset in range(1, np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
+        #     # print(avgHeight, peakHeight)
+        #     # if peakHeight / avgHeight > 4 * maxRange["value"]:
+        #     # print(diff)
+        #     if diff > 1e-9:
+        #         maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
+        #         maxRange["value"] = peakHeight / avgHeight 
+        #         # print(maxRange["value"])
+        #     diff = np.abs(tempSpec[index + offset] + tempSpec[index - offset])
+        #     # print(diff)
+        #     peakHeight += tempSpec[index + offset] + tempSpec[index - offset]
+        #     # avgHeight = (np.mean(tempSpec[index-offset:]) + np.mean(tempSpec[:index+offset+1])) / 2.
 
-        if maxRange["value"] > 4:
-            return True, maxRange["range"]
-        else:
-            return False, np.array([])
+        # if maxRange["value"] > 4:
+        #     return True, maxRange["range"]
+        # else:
+        #     return False, np.array([])
         
     def ToTextFile(self, filename, OSR = 32):
         _, _, _, _, _, _ = self.Metrics(OSR)
