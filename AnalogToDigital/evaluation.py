@@ -348,7 +348,7 @@ class SigmaDeltaPerformance(object):
             diff = np.abs(peakChange/2. - avgHeight)/avgHeight
             ratio = peakChange/(2 * avgHeight)
             print(diff, ratio, offset, peakChange / 2, avgHeight)
-            if ratio < .1:
+            if ratio < 1.:
                 print("Break")
                 break
             maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
