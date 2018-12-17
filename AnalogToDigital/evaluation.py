@@ -327,7 +327,7 @@ class SigmaDeltaPerformance(object):
         """
         # print("PeakSupport:")
         localPathSize = np.int(20)
-        maxPeakNeighbor = np.int(7)     
+        maxPeakNeighbor = np.int(10)     
         midIndex = np.int(fIndex)
         # print("Peak Index: %s" % midIndex)
         lowerIndexBound = np.minimum(localPathSize, midIndex)
