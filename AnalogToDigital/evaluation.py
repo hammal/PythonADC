@@ -11,6 +11,7 @@ class SNRvsAmplitude(object):
     def __init__(self, system, estimates, OSR=32):
         self.estimates = []
         self.system = system
+        self.OSR = OSR
         index = 0
         for est in estimates:
             self.estimates.append(
@@ -36,7 +37,7 @@ class SNRvsAmplitude(object):
             # self.snrVsAmp[index,4] Total Harmonic distortion and noise
             DR, self.snrVsAmp[index,1], THD, self.snrVsAmp[index,4], ENOB, self.snrVsAmp[index,2] = est["performance"].Metrics(OSR)
             self.snrVsAmp[index, 0] = est["inputPower"]
-            self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (1.25 ** 2 / 2.), OSR=OSR)
+            self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (1.25 ** 2 / 2.))
         shuffleMask = np.argsort(self.snrVsAmp[:,0])
         self.snrVsAmp = self.snrVsAmp[shuffleMask,:]
 
@@ -45,7 +46,7 @@ class SNRvsAmplitude(object):
         description = ["IP", "SNR", "TMSNR", "TSNR", "THDN"]
         np.savetxt(filename, self.snrVsAmp, delimiter=', ', header=", ".join(description), comments='')
 
-    def PlotInputPowerVsSNR(self, OSR, ax=False):
+    def PlotInputPowerVsSNR(self, ax=False):
         # inputPower = np.zeros(self.size)
         # SNR = np.zeros_like(inputPower)
         # TSNR = np.zeros_like(inputPower)
@@ -65,8 +66,8 @@ class SNRvsAmplitude(object):
         ax.set_ylabel("SNR dB")
         return ax
 
-    def theoreticalPerformance(self,inputPower, OSR):
-        return 10 * np.log10(inputPower * 12 * (2 * self.system.order + 1) * OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
+    def theoreticalPerformance(self,inputPower):
+        return 10 * np.log10(inputPower * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
 
 
 
