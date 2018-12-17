@@ -253,6 +253,7 @@ class SigmaDeltaPerformance(object):
             DR = 10. * np.log10(3 * (2 ** N - 1)**2 * (2 * self.system.order + 1) * OSR ** (2 * self.system.order + 1) / (2 * np.pi ** (2 * self.system.order)))
             return DR
     def computeHarmonics(self):
+        print("Compute Harmonics")
         # print(f)
         fIndex = self.fIndex
         if fIndex == 0:
@@ -326,7 +327,7 @@ class SigmaDeltaPerformance(object):
         """
         # print("PeakSupport:")
         localPathSize = np.int(20)
-        maxPeakNeighbor = np.int(5)     
+        maxPeakNeighbor = np.int(7)     
         midIndex = np.int(fIndex)
         # print("Peak Index: %s" % midIndex)
         lowerIndexBound = np.minimum(localPathSize, midIndex)
@@ -340,7 +341,6 @@ class SigmaDeltaPerformance(object):
         avgHeight = (np.mean(tempSpec[:index]) + np.mean(tempSpec[index+1:])) / 2.
         maxRange = {"range": np.array([midIndex]), "value": peakHeight / avgHeight }
         
-        print("Mark")
         for offset in range(1,  np.minimum(maxPeakNeighbor, np.minimum(lowerIndexBound, upperIndexBound))):
             peakChange = tempSpec[index + offset] + tempSpec[index - offset]
             peakHeight += peakChange
