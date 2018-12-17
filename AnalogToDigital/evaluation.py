@@ -324,7 +324,7 @@ class SigmaDeltaPerformance(object):
         Checks if there is peak at f and returns its support
         """
         # print("PeakSupport:")
-        localPathSize = np.int(1000)
+        localPathSize = np.int(100)
         maxPeakNeighbor = np.int(4)
         maxPeakNeighbor = np.int(20)     
         midIndex = np.int(fIndex)
