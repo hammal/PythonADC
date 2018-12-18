@@ -17,7 +17,7 @@ class SNRvsAmplitude(object):
             self.estimates.append(
                 {
                     "estimates": est,
-                    "performance": SigmaDeltaPerformance(system, est),
+                    "performance": SigmaDeltaPerformance(system, est, osr=OSR),
                     "inputPower": np.var(est.flatten()) / (1.25 ** 2 / 2.)
                 }
             )
