@@ -67,7 +67,7 @@ class SNRvsAmplitude(object):
         return ax
 
     def theoreticalPerformance(self,inputPower):
-        return 10 * np.log10(inputPower / 1.25**2 / 2 * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
+        return 10 * np.log10(inputPower / 1.25**2 * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
         # return 10 * np.log10(inputPower * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
 
 
@@ -134,7 +134,7 @@ class SigmaDeltaPerformance(object):
         noisePowerSpectralDensity = np.zeros_like(freq)
         # Fitting a line at OSR
         point = int(freq.size / self.OSR)
-        point += 11
+        # point += 11
         pointValue = spec[point]
         for i,f in enumerate(freq):
             noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2 / np.sum(np.abs(Tf(freq[point])))**2 * pointValue
