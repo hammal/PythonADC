@@ -92,7 +92,7 @@ class SigmaDeltaPerformance(object):
         self.estimate = estimate.flatten()
         self.estimate -= np.mean(self.estimate)
         self.freq, self.spec = self.powerSpectralDensity()
-        self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq)
+        self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq, self.spec)
         self.fIndex = self.findMax(self.spec)
         self.f = self.fIndex * self.fs / (2. * self.N)
         # print("f: %s" % self.f)
@@ -128,15 +128,18 @@ class SigmaDeltaPerformance(object):
         #     ax.semilogx(steps, values, "+-", label="Theoretical Reference")
         return ax
 
-    def theoreticalNoiseTransferFunction(self, freqs):
+    def theoreticalNoiseTransferFunction(self, freq, spec):
         """
         Reference Transferfunction
         """
         systemResponse = lambda f: np.dot(self.system.frequencyResponse(f), self.system.b)
         Tf = lambda f: np.dot(np.conj(np.transpose(systemResponse(f))), np.linalg.pinv(np.outer(systemResponse(f), systemResponse(f).conj())))
-        noisePowerSpectralDensity = np.zeros_like(freqs)
+        noisePowerSpectralDensity = np.zeros_like(freq)
+        # Fitting a line at OSR
+        point = int(freq.size / self.OSR)
+        pointValue = spec[point]
         for i,f in enumerate(freqs):
-            noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2
+            noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2 / np.sum(np.abs(Tf(freq[point]))))**2 * pointValue
         return noisePowerSpectralDensity
 
     def findMax(self, arg):
