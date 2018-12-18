@@ -215,7 +215,7 @@ class SigmaDeltaPerformance(object):
         self.signalMask = np.zeros_like(self.harmonicMask, dtype=bool)
 
         # Mark first samples irrelevant
-        startOffset = 5
+        startOffset = 3
         noiseMask[fb:] = False 
         noiseMask[:startOffset] = False
 
