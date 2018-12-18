@@ -212,7 +212,7 @@ class SigmaDeltaPerformance(object):
         if OSR < 1:
             raise "Non valid oversampling rate"
         # fb = np.int(self.fs / np.float(2 * OSR) * self.N)
-        fb = np.int(self.N / OSR)
+        fb = np.int(self.N / OSR / 2)
 
         noiseMask = np.ones_like(self.spec, dtype=bool)
         self.harmonicMask = np.zeros_like(noiseMask, dtype=bool)
