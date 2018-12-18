@@ -139,7 +139,7 @@ class SigmaDeltaPerformance(object):
         point = int(freq.size / self.OSR)
         pointValue = spec[point]
         for i,f in enumerate(freqs):
-            noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2 / np.sum(np.abs(Tf(freq[point]))))**2 * pointValue
+            noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2 / np.sum(np.abs(Tf(freq[point])))**2 * pointValue
         return noisePowerSpectralDensity
 
     def findMax(self, arg):
