@@ -84,7 +84,8 @@ class SigmaDeltaPerformance(object):
     - IPn (Interception point n, for n = 1,...,N
     """
 
-    def __init__(self, system, estimate, fs = 1., osr = 32, fullScaleAmplitude = 1.):
+    def __init__(self, system, estimate, fs = 1., osr = 32, fullScaleAmplitude = 1., eta2 = 1.):
+        self.eta2 = eta2
         self.OSR = osr
         self.system = system
         self.fs = fs
@@ -133,7 +134,7 @@ class SigmaDeltaPerformance(object):
         Reference Transferfunction
         """
         systemResponse = lambda f: np.dot(self.system.frequencyResponse(f), self.system.b)
-        Tf = lambda f: np.dot(np.conj(np.transpose(systemResponse(f))), np.linalg.pinv(np.outer(systemResponse(f), systemResponse(f).conj())))
+        Tf = lambda f: np.dot(np.conj(np.transpose(systemResponse(f))), np.linalg.pinv(self.eta2 * np.eye(self.system.order) + np.outer(systemResponse(f), systemResponse(f).conj())))
         noisePowerSpectralDensity = np.zeros_like(freq)
         # Fitting a line at OSR
         point = int(freq.size / self.OSR)
