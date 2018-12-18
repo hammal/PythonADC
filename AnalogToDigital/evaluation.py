@@ -211,12 +211,23 @@ class SigmaDeltaPerformance(object):
         epsilon = 1e-18
         if OSR < 1:
             raise "Non valid oversampling rate"
-        fb = np.int(self.fs / np.float(2 * OSR) * self.N)
-      
+        # fb = np.int(self.fs / np.float(2 * OSR) * self.N)
+        fb = np.int(self.N / OSR)
+
+        print(self.N)
+        print(fb)
+        print(self.fs)
+        print(self.fs / np.float(2 * OSR))
+        exit(1)
+
         noiseMask = np.ones_like(self.spec, dtype=bool)
         self.harmonicMask = np.zeros_like(noiseMask, dtype=bool)
         self.signalMask = np.zeros_like(self.harmonicMask, dtype=bool)
 
+        # Mark first samples irrelevant
+        startOffset = 3
+        noiseMask[fb:] = False 
+        noiseMask[:startOffset] = False
 
         thd = 0.
         signalPower = epsilon
@@ -236,19 +247,20 @@ class SigmaDeltaPerformance(object):
         noise = self.spec[noiseMask]
         self.noiseMask = noiseMask
         # print(noise.size, fb)
-        startOffset = 5
-        noisePower = np.sum(noise[startOffset:fb])
-        # noisePower = np.sum(noise[startOffset:fb - support/2])
-        noisePower += np.mean(noise[startOffset:fb]) * (support + startOffset)
+        noisePower = np.sum(noise)
+        noisePower += np.mean(noise) * (support + startOffset)
         # noisePower = np.mean(noise[startOffset:fb]) * (fb)
 
+        theoreticalNoise = np.sum(self.theoreticalSpec[noiseMask])
+        theoreticalNoise += np.mean(theoreticalNoise) * (support + startOffset)
+        
         # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
         SNR = 10 * np.log10(signalPower) + DR
         THD = 10 * np.log10(thd / signalPower)
         THDN = 10 * np.log10((thd + noisePower) / signalPower)
 
-        theoreticalSNR = 10 * np.log10(signalPower/np.sum(self.theoreticalSpec[startOffset:fb]))
+        theoreticalSNR = 10 * np.log10(signalPower/theoreticalNoise)
         return DR, SNR, THD, THDN, self.ENOB(DR), theoreticalSNR
 
     def ENOB(self, DR):
