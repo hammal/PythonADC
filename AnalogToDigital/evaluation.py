@@ -262,7 +262,7 @@ class SigmaDeltaPerformance(object):
             DR = 10. * np.log10(3 * (2 ** N - 1)**2 * (2 * self.system.order + 1) * OSR ** (2 * self.system.order + 1) / (2 * np.pi ** (2 * self.system.order)))
             return DR
     def computeHarmonics(self):
-        print("Compute Harmonics")
+        # print("Compute Harmonics")
         # print(f)
         fIndex = self.fIndex
         if fIndex == 0:
@@ -357,9 +357,9 @@ class SigmaDeltaPerformance(object):
             avgHeight = (np.mean(tempSpec[index - 2 * offset:index-offset]))# + np.mean(tempSpec[index+offset+1:])) / 2.
             diff = np.abs(peakChange/2. - avgHeight)/avgHeight
             ratio = peakChange/(2 * avgHeight)
-            print(diff, ratio, offset, peakChange / 2, avgHeight)
+            # print(diff, ratio, offset, peakChange / 2, avgHeight)
             if ratio < 1.:
-                print("Break")
+                # print("Break")
                 break
             maxRange["range"] = np.arange( 1 + 2 * (offset - 1)) + midIndex - (offset - 1)
             maxRange["value"] = peakHeight / avgHeight 
