@@ -67,7 +67,7 @@ class SNRvsAmplitude(object):
         return ax
 
     def theoreticalPerformance(self,inputPower):
-        return 10 * np.log10(inputPower / 1.25**2 / 2 * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
+        return 10 * np.log10(inputPower / 1.25**2 / 2 / 2 * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
         # return 10 * np.log10(inputPower * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
 
 
