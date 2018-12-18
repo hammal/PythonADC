@@ -105,16 +105,10 @@ class SigmaDeltaPerformance(object):
         if not ax:
             fig, ax = plt.subplots()
         if seperate:
-            noiseMask = np.ones_like(self.spec, dtype=bool)
-
-            for h in self.harmonics:
-                if h["power"] > 0:
-                    # print(h["support"])
-                    noiseMask[h["support"]] = False
-            ax.semilogx(self.freq[noiseMask], 10 * np.log10(self.spec[noiseMask]), label = label + "_noise")
-            for h in self.harmonics:
-                if h["power"] > 0:
-                    ax.semilogx(self.freq[h['support']], 10 * np.log10(self.spec[h['support']]), "-*", label=label + "_h%i" % h['number'])
+            _, _, _, _, _, _ = self.Metrics(self.OSR)
+            ax.semilogx(self.freq[self.noiseMask], 10 * np.log10(self.spec[self.noiseMask]), label = label + "_noise")
+            ax.semilogx(self.freq[self.harmonicMask], 10 * np.log10(self.spec[self.harmonicMask]), "-*", label = label + "_harmonics")
+            ax.semilogx(self.freq[self.signalMask], 10 * np.log10(self.spec[self.signalMask]), "-+", label = label + "_signal")    
         else:
             # print(self.spec.shape)
             ax.semilogx(self.freq, 10 * np.log10(self.spec), label=label)
@@ -219,7 +213,7 @@ class SigmaDeltaPerformance(object):
         self.signalMask = np.zeros_like(self.harmonicMask, dtype=bool)
 
         # Mark first samples irrelevant
-        startOffset = 3
+        startOffset = 5
         noiseMask[fb:] = False 
         noiseMask[:startOffset] = False
 
@@ -248,7 +242,7 @@ class SigmaDeltaPerformance(object):
         # noisePower = np.mean(noise[startOffset:fb]) * (fb)
 
         theoreticalNoise = np.sum(self.theoreticalSpec[noiseMask])
-        # theoreticalNoise += np.mean(self.theoreticalSpec[noiseMask]) * (support + startOffset + harmonicSupport)
+        theoreticalNoise += np.mean(self.theoreticalSpec[noiseMask]) * (support + startOffset + harmonicSupport)
 
         # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
