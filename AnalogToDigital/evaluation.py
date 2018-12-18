@@ -137,6 +137,7 @@ class SigmaDeltaPerformance(object):
         noisePowerSpectralDensity = np.zeros_like(freq)
         # Fitting a line at OSR
         point = int(freq.size / self.OSR)
+        point *= np.int(2)
         pointValue = spec[point]
         for i,f in enumerate(freq):
             noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2 / np.sum(np.abs(Tf(freq[point])))**2 * pointValue
@@ -246,7 +247,7 @@ class SigmaDeltaPerformance(object):
         THD = 10 * np.log10(thd / signalPower)
         THDN = 10 * np.log10((thd + noisePower) / signalPower)
 
-        theoreticalSNR = 10 * np.log10(signalPower/np.sum(self.theoreticalSpec[startOffset:fb])) - 363
+        theoreticalSNR = 10 * np.log10(signalPower/np.sum(self.theoreticalSpec[startOffset:fb]))
         return DR, SNR, THD, THDN, self.ENOB(DR), theoreticalSNR
 
     def ENOB(self, DR):
