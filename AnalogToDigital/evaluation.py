@@ -138,7 +138,7 @@ class SigmaDeltaPerformance(object):
         # Fitting a line at OSR
         point = int(freq.size / self.OSR)
         pointValue = spec[point]
-        for i,f in enumerate(freqs):
+        for i,f in enumerate(freq):
             noisePowerSpectralDensity[i] = np.sum(np.abs(Tf(f)))**2 / np.sum(np.abs(Tf(freq[point])))**2 * pointValue
         return noisePowerSpectralDensity
 
