@@ -214,12 +214,6 @@ class SigmaDeltaPerformance(object):
         # fb = np.int(self.fs / np.float(2 * OSR) * self.N)
         fb = np.int(self.N / OSR)
 
-        print(self.N)
-        print(fb)
-        print(self.fs)
-        print(self.fs / np.float(2 * OSR))
-        exit(1)
-
         noiseMask = np.ones_like(self.spec, dtype=bool)
         self.harmonicMask = np.zeros_like(noiseMask, dtype=bool)
         self.signalMask = np.zeros_like(self.harmonicMask, dtype=bool)
@@ -253,7 +247,7 @@ class SigmaDeltaPerformance(object):
 
         theoreticalNoise = np.sum(self.theoreticalSpec[noiseMask])
         theoreticalNoise += np.mean(theoreticalNoise) * (support + startOffset)
-        
+
         # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
         SNR = 10 * np.log10(signalPower) + DR
