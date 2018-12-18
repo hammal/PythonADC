@@ -246,7 +246,7 @@ class SigmaDeltaPerformance(object):
         # noisePower = np.mean(noise[startOffset:fb]) * (fb)
 
         theoreticalNoise = np.sum(self.theoreticalSpec[noiseMask])
-        theoreticalNoise += np.mean(theoreticalSpec[noiseMask]) * (support + startOffset)
+        theoreticalNoise += np.mean(self.theoreticalSpec[noiseMask]) * (support + startOffset)
 
         # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
