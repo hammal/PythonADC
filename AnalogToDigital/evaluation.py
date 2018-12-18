@@ -106,8 +106,9 @@ class SigmaDeltaPerformance(object):
             fig, ax = plt.subplots()
         if seperate:
             _, _, _, _, _, _ = self.Metrics(self.OSR)
+            ax.semilogx(self.freq, 10 * np.log10(self.spec),'--', label = label + "_psd")
             ax.semilogx(self.freq[self.noiseMask], 10 * np.log10(self.spec[self.noiseMask]), label = label + "_noise")
-            ax.semilogx(self.freq[self.harmonicMask], 10 * np.log10(self.spec[self.harmonicMask]), "-*", label = label + "_harmonics")
+            ax.semilogx(self.freq[self.harmonicMask], 10 * np.log10(self.spec[self.harmonicMask]), "*", label = label + "_harmonics")
             ax.semilogx(self.freq[self.signalMask], 10 * np.log10(self.spec[self.signalMask]), "-+", label = label + "_signal")    
         else:
             # print(self.spec.shape)
