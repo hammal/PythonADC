@@ -387,7 +387,7 @@ class SigmaDeltaPerformance(object):
         
     def ToTextFile(self, filename, OSR = 32):
         _, _, _, _, _, _ = self.Metrics(OSR)
-        signal = np.ones((self.freq.size)) * 1e-10
+        signal = np.ones((self.freq.size)) * 1e-20
         harmonics = np.copy(signal)
         noise = np.copy(signal)
 
