@@ -8,7 +8,9 @@ class SNRvsAmplitude(object):
     This is a helper class for plotting SNR vs input power
     """
 
-    def __init__(self, system, estimates, OSR=32):
+    def __init__(self, system, estimates, OSR=32, gamma = 1., bound = 1.):
+        self.gamma = gamma
+        self.bound = bound
         self.estimates = []
         self.system = system
         self.OSR = OSR
@@ -67,7 +69,7 @@ class SNRvsAmplitude(object):
         return ax
 
     def theoreticalPerformance(self,inputPower):
-        return 10 * np.log10(inputPower / (2 * 1.25)**2 * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
+        return 10 * np.log10(inputPower / (self.bound)**2 * 3 * (self.gamma/2.)**(2 * self.system.order) * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((np.pi)**(2 * self.system.order)))
         # return 10 * np.log10(inputPower * 12 * (2 * self.system.order + 1) * self.OSR ** (2 * self.system.order + 1) / ((2 * np.pi)**(2 * self.system.order)))
 
 
