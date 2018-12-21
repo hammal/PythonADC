@@ -20,7 +20,7 @@ class SNRvsAmplitude(object):
                 {
                     "estimates": est,
                     "performance": SigmaDeltaPerformance(system, est, osr=OSR),
-                    "inputPower": np.var(est.flatten()) / (1.25 ** 2 / 2.)
+                    "inputPower": np.var(est.flatten()) / (bound ** 2 / 2.)
                 }
             )
             index += 1
@@ -39,7 +39,7 @@ class SNRvsAmplitude(object):
             # self.snrVsAmp[index,4] Total Harmonic distortion and noise
             DR, self.snrVsAmp[index,1], THD, self.snrVsAmp[index,4], ENOB, self.snrVsAmp[index,2] = est["performance"].Metrics(OSR)
             self.snrVsAmp[index, 0] = est["inputPower"]
-            self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (1.25 ** 2 / 2.))
+            self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (bound ** 2 / 2.))
         shuffleMask = np.argsort(self.snrVsAmp[:,0])
         self.snrVsAmp = self.snrVsAmp[shuffleMask,:]
 
