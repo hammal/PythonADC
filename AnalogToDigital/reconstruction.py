@@ -294,7 +294,6 @@ class WienerFilter(object):
         self.mixingMatrix = control.mixingMatrix
         self.computeControlTrajectories(control)
         
- 
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float64)
         mf = np.zeros((self.order, control.size), dtype=np.float64)
@@ -312,6 +311,77 @@ class WienerFilter(object):
             mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
         return u
+
+
+class ParallelWienerFilter(WienerFilter):
+    """
+    This filter implements the diagonilized version of the reconstruction algorithm.
+    However due to python it won't utilize the multi-processing power of the platform.
+    """
+
+    def __init__(self, t, system, inputs, options={}):
+        super().__init__(t, system, inputs, options)
+        Df, Qf = scipy.linalg.eig(self.Af)
+        Db, Qb = scipy.linalg.eig(self.Ab)
+
+        self.Qf = Qf
+        self.Qb = Qb
+
+        self.QfInv = np.linalg.inv(Qf)
+        self.QbInv = np.linalg.inv(Qb)
+
+        self.Af = np.diag(Df)
+        self.Ab = np.diag(Db)
+
+        controlOutComes = 2 ** self.system.order
+
+        self.lookupForward = np.zeros((system.order, controlOutComes), dtype=np.complex128)
+        self.lookupBackward = np.zeros_like(self.lookupForward)
+
+        self.wf = - np.dot(self.w.transpose(), Qf)
+        self.wb = np.dot(self.w.transpose(), Qb)
+
+    def filter(self, control, initialState=None):
+        """
+        This is the actual filter operation. The controller needs to be a
+        Controller class instance from system.py.
+        """
+        # Compute Bf and Bb for this type of control
+        self.mixingMatrix = control.mixingMatrix
+        self.computeControlTrajectories(control)
+
+        
+        # Initalise memory
+        u = np.zeros((control.size, len(self.inputs)), dtype=np.complex128)
+        mf = np.zeros((self.order), dtype=np.complex128)
+        mb = np.zeros_like(mf)
+
+        # Populate lookup tables
+        Bff = np.dot(self.QfInv, self.Bf)
+        Bbb = np.dot(self.QbInv, self.Bb)
+        for index in range(2 ** self.system.order):
+            bitSequence = (2. * control.unpackbits(index) - 1)
+            print(bitSequence, Bff)
+            self.lookupForward[:, index] = np.dot(Bff, bitSequence)
+            self.lookupBackward[:, index] = np.dot(Bbb, bitSequence)
+
+        print(self.Af)
+        print(self.Ab)
+        print(self.wf)
+        print(self.wb)
+        # exit(1)
+
+        # If not initial state use the control sequence and assume at rails 1 V 
+        if initialState:
+            mf[:,0] = np.dot(self.QfInv, initialState)
+
+        for index in range(1, control.size):
+            mf = np.dot(self.Af, mf) + self.lookupForward[:, control.getIndex(index - 1)] + self.Of
+            u[index] = np.dot(self.wf, mf)
+        for index in range(control.size - 2, 1, -1):
+            mb = np.dot(self.Ab, mb) + self.lookupBackward[:, control.getIndex(index)] + self.Ob
+            u[index] += np.dot(self.wb, mb)
+        return np.real(u)
 
 
 
