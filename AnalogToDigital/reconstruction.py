@@ -26,7 +26,7 @@ def bruteForceCare(A, B, Q, R):
             print("V_frw:\n{}\n".format(V))
             print("V_frw.dot(V_frw):\n{}".format(np.dot(V, V)))
             raise FloatingPointError
-    print(V)
+    # print(V)
     return V
 
 def care(A, B, Q, R):
