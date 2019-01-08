@@ -18,7 +18,7 @@ def bruteForceCare(A, B, Q, R):
     tau = 1e-5
     RInv = np.linalg.inv(R)
 
-    while not np.allclose(V,V_tmp, rtol=1e-7, atol=1e-10):
+    while not np.allclose(V,V_tmp, rtol=1e-5, atol=1e-8):
         V_tmp = V
         try:
             V = V + tau * (np.dot(A,V) + np.transpose(np.dot(A,V)) + Q - np.dot(V, np.dot(B, np.dot(RInv, np.dot(B.transpose(), V)))))

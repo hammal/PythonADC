@@ -45,8 +45,8 @@ def piBlockSystem1():
     start_time = time.time()
 
     size = 20000    # Number of samples in the simulation
-    M = (1<<1)      # Number of parallel controlnverters
-    N = 4           # Number of PI mixing submatrices
+    M = (1<<0)      # Number of parallel controlnverters
+    N = 2           # Number of PI mixing submatrices
     Ts = 8e-5       # Sampling period
     num_inputs = 1
     t = np.linspace(0,(size-1)*Ts, size)    # Time grid for control updates
@@ -103,7 +103,7 @@ def piBlockSystem1():
     ctrl = system.Control(mixingMatrix, size)
 
     sim = simulator.Simulator(sys, ctrl, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
-                                                  'noise': [{'std':1e-4, 'steeringVector': np.ones((N+1)*M)}]})
+                                                  'noise':[{'std': 1e-6    , 'steeringVector':  beta*np.eye((N+1)*M)[:,i], 'name':'Bastard'} for i in range((N+1)*M)]})
 
 
     res = sim.simulate(t, input_signals)
@@ -117,7 +117,7 @@ def piBlockSystem1():
 
     options = {'eta2':eta2,
                'sigmaU2':[1.],
-               'noise':[{'std': 1e-4, 'steeringVector': np.ones((N+1)*M), 'name':'Bastard'}]}
+               'noise':[{'std': 1e-6    , 'steeringVector': beta*np.eye((N+1)*M)[:,i], 'name':'Bastard'} for i in range((N+1)*M)]}
 
     recon = reconstruction.WienerFilter(t, sys, input_signals, options)
     input_estimates = recon.filter(ctrl)
