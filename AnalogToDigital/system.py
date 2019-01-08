@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+
 if sys.version_info >= (3,0):
     import pickle as cPickle
 else:
@@ -134,6 +135,12 @@ class Control(object):
         self.type = 'analog switch'
         # The internal memory
         self.mixingMatrix = mixingMatrix
+        if mixingMatrix.shape[0] > 8:
+            print(mixingMatrix.shape[0])
+            raise NotImplementedError
+        self.leftpadd = 8 - (mixingMatrix.shape[0] )
+        self.leftpadding = np.zeros(self.leftpadd, dtype=np.int)
+ 
         # Check if passed memory
         if memory.shape[0] == size:
             self.memory = memory
@@ -176,6 +183,25 @@ class Control(object):
             return np.dot(self.scalingSequence(item), self.memory[item])
 
         return self.memory[item]
+
+    def getIndex(self, item):
+        """
+        Transform output to unique index
+        """
+        return self.packbits(np.array((self.memory[item] + 1) / 2, dtype=np.int))
+
+    def packbits(self, bitarray):
+        """
+        unpacks the bitarray into its integer representation
+        """
+        # print(np.concatenate((self.leftpadding, bitarray.flatten())))
+        return np.packbits(np.concatenate((self.leftpadding, bitarray.flatten())))[0]
+
+    def unpackbits(self, value):
+        """
+        packs the value into an bitarray
+        """
+        return np.unpackbits(np.array([value], dtype=np.uint8))[self.leftpadd:]
 
     def update(self, state):
         """
