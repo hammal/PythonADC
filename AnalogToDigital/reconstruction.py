@@ -1,6 +1,7 @@
 """ This file contains various reconstruction implementations """
 
 import numpy as np
+from numpy.linalg import LinAlgError
 import scipy.linalg
 from AnalogToDigital.topologiGenerator import SystemTransformations
 from AnalogToDigital.system import Noise
@@ -9,6 +10,24 @@ from AnalogToDigital.system import Noise
 from scipy.integrate import odeint
 import scipy.optimize
 CHAIN_system = True
+
+def bruteForceCare(A, B, Q, R):
+    # Initialize V_frw:
+    V = np.eye(A.shape[0])
+    V_tmp = np.zeros_like(V)
+    tau = 1e-5
+    RInv = np.linalg.inv(R)
+
+    while not np.allclose(V,V_tmp, rtol=1e-7, atol=1e-10):
+        V_tmp = V
+        try:
+            V = V + tau * (np.dot(A,V) + np.transpose(np.dot(A,V)) + Q - np.dot(V, np.dot(B, np.dot(RInv, np.dot(B.transpose(), V)))))
+        except FloatingPointError:
+            print("V_frw:\n{}\n".format(V))
+            print("V_frw.dot(V_frw):\n{}".format(np.dot(V, V)))
+            raise FloatingPointError
+    print(V)
+    return V
 
 def care(A, B, Q, R):
     """
@@ -24,8 +43,18 @@ def care(A, B, Q, R):
     Q = np.array(Q, dtype=np.float64)
     R = np.array(R, dtype=np.float64)
 
-    Vf = scipy.linalg.solve_continuous_are(A, B, Q, R)
-    Vb = scipy.linalg.solve_continuous_are(-A, B, Q, R)
+    try:
+        Vf = scipy.linalg.solve_continuous_are(A, B, Q, R)
+    except LinAlgError:
+        print("Cholesky Method Failed for computing the CARE of Vf. Starting brute force")
+        Vf = bruteForceCare(A, B, Q, R)
+    
+    try:
+        Vb = scipy.linalg.solve_continuous_are(-A, B, Q, R)
+    except LinAlgError:
+        print("Cholesky Method Failed for computing the CARE of Vb. Starting brute force")
+        Vb = bruteForceCare(-A, B, Q, R)
+  
     # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
     # res1 = np.dot(A.transpose(), Vf) + np.dot(Vf, A) - np.dot(Vf, np.dot(B, np.dot(np.lina)))
     return Vf, Vb

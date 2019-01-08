@@ -37,6 +37,11 @@ testTopologiGenerator:
   script:
         - "python -m AnalogToDigital.test.test_topologiGenerator"
 
+testCARE:
+  stage: test
+  script:
+        - "python -m AnalogToDigital.test.test_care"
+
 # testDeltaSigma:
 #   image: continuumio/anaconda
 #   before_script:

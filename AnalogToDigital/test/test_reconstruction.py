@@ -223,7 +223,6 @@ def test_for_noise_simulation():
     plt.plot(t, u_hat_with_noise, label="u_hat_with_noise")
     plt.legend()
 
-
 if __name__ == "__main__":
     test_for_constant_signal()
     test_for_first_order_filter_signal()
