@@ -135,9 +135,6 @@ class Control(object):
         self.type = 'analog switch'
         # The internal memory
         self.mixingMatrix = mixingMatrix
-        if mixingMatrix.shape[0] > 8:
-            print(mixingMatrix.shape[0])
-            raise NotImplementedError
         self.leftpadd = 8 - (mixingMatrix.shape[0] )
         self.leftpadding = np.zeros(self.leftpadd, dtype=np.int)
  

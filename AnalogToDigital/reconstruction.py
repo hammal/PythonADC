@@ -320,6 +320,10 @@ class ParallelWienerFilter(WienerFilter):
     """
 
     def __init__(self, t, system, inputs, options={}):
+        if system.order > 8:
+            print("Don't use ParallelWienerFilter for this system order. Currently only supports sizes up to 8. The system you have submitted has order = %i" % system.order)
+            raise NotImplementedError
+
         super().__init__(t, system, inputs, options)
         Df, Qf = scipy.linalg.eig(self.Af)
         Db, Qb = scipy.linalg.eig(self.Ab)
