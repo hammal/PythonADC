@@ -179,14 +179,14 @@ def test_lowering_order():
     plt.legend(["%s" % x for x in range(order)])
 
     u_hats = []
-    for index in range(1, order):
+    for index in range(1, order + 1):
         newSystem, newControl, newInput = system.LowerOrderSystem(sys, ctrl, inp, index)
         recon = reconstruction.WienerFilter(t, newSystem, (newInput,))
         u_hats.append(recon.filter(newControl))
 
     plt.figure()
     plt.plot(t, inp.scalarFunction(t), label="u")
-    for index in range(order - 1):
+    for index in range(order):
         plt.plot(t, u_hats[index], label="u_hat_%i" % (index + 1))
     plt.legend()
 
