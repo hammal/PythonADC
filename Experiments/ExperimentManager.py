@@ -1019,7 +1019,4 @@ if __name__ == "__main__":
 
 
     # multipleInputExperiment()
-    # randomWalkPlusSinusoid()
-
     randomWalkPlusSinusoid()
-    # main(**args)
