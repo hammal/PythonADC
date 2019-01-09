@@ -15,7 +15,7 @@ from AnalogToDigital.reconstruction import WienerFilter
 # from .reconstruction import WienerFilterWithObservations
 # from .reconstruction import SigmaDeltaApproach
 from AnalogToDigital.simulator import Simulator
-from AnalogToDigital.system import System, Control, Input, FirstOrderHold, Sin
+from AnalogToDigital.system import System, Control, Input, FirstOrderHold, Sin, LowerOrderSystem
 # from .topologiGenerator import Topology
 from AnalogToDigital.defaultSystems import DefaultSystems
 from AnalogToDigital.evaluation import Evaluation

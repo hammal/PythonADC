@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import copy
 
 if sys.version_info >= (3,0):
     import pickle as cPickle
@@ -135,10 +136,9 @@ class Control(object):
         self.type = 'analog switch'
         # The internal memory
         self.mixingMatrix = mixingMatrix
-        if mixingMatrix.shape[0] > 8:
-            print(mixingMatrix.shape[0])
-            raise NotImplementedError
         self.leftpadd = 8 - (mixingMatrix.shape[0] )
+        if self.leftpadd < 0:
+            self.leftpadd = 0
         self.leftpadding = np.zeros(self.leftpadd, dtype=np.int)
  
         # Check if passed memory
@@ -229,6 +229,20 @@ class Control(object):
         file.close()
 
         self.__dict__ = cPickle.loads(dataPickle)
+
+
+
+def LowerOrderSystem(system, control, input, order):
+    # Check if order is within a valid range
+    if order > system.order or order < 1:
+        raise "Invalid order requested."
+    
+    newSystem = System(system.A[:order, :order], system.c[:order, :order])
+    newControl = Control(control.mixingMatrix[:order, :order], control.size, memory=control.memory[:,:order])
+    newInput = copy.deepcopy(input)
+    newInput.steeringVector = newInput.steeringVector[:order]
+    return newSystem, newControl, newInput
+
 
 # class Controller(object):
 #     def __init__(self, model, fs, fc, size):
