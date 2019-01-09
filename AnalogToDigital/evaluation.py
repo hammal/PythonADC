@@ -61,7 +61,7 @@ class SNRvsAmplitude(object):
         if not ax:
                 fig, ax = plt.subplots()
         ax.plot(10 * np.log10(self.snrVsAmp[:,0] / (self.bound**2/2)), self.snrVsAmp[:,3], label="theoretical")
-        ax.plot(10 * np.log10(self.snrVsAmp[:,0] / (self.bound**2/2)), self.snrVsAmp[:,2], label="theoretical measured")
+        # ax.plot(10 * np.log10(self.snrVsAmp[:,0] / (self.bound**2/2)), self.snrVsAmp[:,2], label="theoretical measured")
         ax.plot(10 * np.log10(self.snrVsAmp[:,0] / (self.bound**2/2)), self.snrVsAmp[:,1], label="measured")
         ax.legend()
         ax.set_xlabel("Input Power dBFS")
