@@ -80,10 +80,7 @@ def estimateSNR(spectralDensity, sinusoidFrequency, N_FFT, Ts, f=None, num_signa
 
     return SNR
 
-<<<<<<< HEAD
-=======
 
->>>>>>> Working files (i.e. not nice clean code) for simulations and data processing
 def estimateNoiseFloor(spectralDensity, sinusoidFrequency, N_FFT, Ts):
     signal_bin = int(np.rint((Ts*sinusoidFrequency) * N_FFT))
 
@@ -563,7 +560,6 @@ def randomWalkPlusSinusoid():
 
 
 
-<<<<<<< HEAD
 def multipleInputExperiment():
     run_time_start = time.time()
 
@@ -787,7 +783,6 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
     # checkCovarianceMatrixConvergence(A,vector)
     # Check Backward Covariance Matrices:
     # checkCovarianceMatrixConvergence(-A,vector)
-
     
     # plt.figure()
     # plt.plot(t,np.sin(2.*np.pi*frequency*t))
@@ -893,6 +888,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         # plt.legend()
         # plt.show()
 
+
     plt.figure()
     [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
     plt.grid()
@@ -953,7 +949,6 @@ def plainVanilla():
     plt.grid()
     plt.show()
 
-
 if __name__ == "__main__":
     # arg_parser = argparse.ArgumentParser(description="")
     # arg_parser.add_argument("--jitterAsGaussianNoise", type=bool, default=False)
@@ -1004,19 +999,5 @@ if __name__ == "__main__":
     # randomWalkPlusSinusoid()
 
     # main(**args)
-=======
 
-if __name__ == "__main__":
-    arg_parser = argparse.ArgumentParser(description="")
-    arg_parser.add_argument("--jitterAsGaussianNoise", type=bool, default=False)
-    arg_parser.add_argument("--jitterAmount", type=float, default=0)
-    arg_parser.add_argument("--sigma_jitter", type=float, default=0)
-    arg_parser.add_argument("--sigma_noise", type=float, default=0)
-    arg_parser.add_argument("--boolSim", type=bool, default=False)
-    arg_parser.add_argument("--boolRec", type=bool, default=False)
 
-    args = vars(arg_parser.parse_args())
-
-    randomWalkPlusSinusoid()
-    # main(**args)
->>>>>>> Working files (i.e. not nice clean code) for simulations and data processing
