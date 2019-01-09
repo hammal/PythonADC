@@ -136,6 +136,8 @@ class Control(object):
         # The internal memory
         self.mixingMatrix = mixingMatrix
         self.leftpadd = 8 - (mixingMatrix.shape[0] )
+        if self.leftpadd < 0:
+            self.leftpadd = 0
         self.leftpadding = np.zeros(self.leftpadd, dtype=np.int)
  
         # Check if passed memory
