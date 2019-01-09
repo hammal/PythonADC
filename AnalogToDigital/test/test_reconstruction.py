@@ -151,6 +151,45 @@ def test_for_sinusodial_signal():
     plt.plot(t, u_hat, label="u_hat")
     plt.legend()
 
+def test_lowering_order():
+    size = 1000
+    order = 8
+    Ts = 0.1
+    amplitude = 0.35
+    frequency = 1e-2
+    phase = np.pi * 7. / 8.
+    vector = np.zeros(order)
+    vector[0] = 1.
+    inp = system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
+
+    A = np.eye(order, k=-1)
+    c = np.eye(order)
+
+    sys = system.System(A, c)
+
+    mixingMatrix = - 1e0 * np.eye(order)
+
+    ctrl = system.Control(mixingMatrix, size)
+
+    sim = simulator.Simulator(sys, ctrl)
+    t = np.linspace(0., 99., size)
+    res = sim.simulate(t, (inp,))
+    plt.figure()
+    plt.plot(res['t'], res['output'])
+    plt.legend(["%s" % x for x in range(order)])
+
+    u_hats = []
+    for index in range(1, order):
+        newSystem, newControl, newInput = system.LowerOrderSystem(sys, ctrl, inp, index)
+        recon = reconstruction.WienerFilter(t, newSystem, (newInput,))
+        u_hats.append(recon.filter(newControl))
+
+    plt.figure()
+    plt.plot(t, inp.scalarFunction(t), label="u")
+    for index in range(order - 1):
+        plt.plot(t, u_hats[index], label="u_hat_%i" % (index + 1))
+    plt.legend()
+
 
 def test_postFiltering():
     size = 10000
@@ -265,6 +304,7 @@ def test_for_noise_simulation():
     plt.legend()
 
 if __name__ == "__main__":
+    test_lowering_order()
     test_for_constant_signal()
     test_for_constant_signalParallel()
     test_for_first_order_filter_signal()
