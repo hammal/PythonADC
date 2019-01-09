@@ -715,7 +715,6 @@ def checkCovarianceMatrixConvergence(A,b,eta2=1):
     print("Covariance Matrices Converge To: \n%s"   % (V,))
 
 
-
 def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma_recon_noise=1e-5):
     start_time = time.time()
 
@@ -782,6 +781,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
     # checkCovarianceMatrixConvergence(A,vector)
     # Check Backward Covariance Matrices:
     # checkCovarianceMatrixConvergence(-A,vector)
+
     
     # plt.figure()
     # plt.plot(t,np.sin(2.*np.pi*frequency*t))
@@ -816,6 +816,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
 
 
     c = np.eye(N*M)
+
     sys = system.System(A, c)
     
 
@@ -829,6 +830,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
                                                   'stateBoundInputs': (Ts*beta*kappa)/(1. - (Ts*beta/np.sqrt(M))),
                                                   'num_parallel_converters':M,
                                                   'noise': [{'std':sigma_sim_noise, 'steeringVector': beta*np.eye(N*M)[:,i]}  for i in range(N*M)]})   # /np.sqrt((N+1)*M)
+
 
     # sim_identity = simulator.Simulator(sys_identity, ctrl_identity, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
                                                   # 'noise': [{'std':1., 'steeringVector': np.ones((K+1)*M)}]})
@@ -871,6 +873,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         freq, spec = signal.welch(input_estimates[:,i], 1./Ts, window='hann', axis=0, nperseg = nperseg, nfft = nfft , scaling='density')
         spectrums[i,:] = spec
         # print(freq.shape, spec.shape)
+
         # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
         # plt.legend()
         # plt.show()
@@ -883,9 +886,19 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
         # plt.legend()
         # plt.show()
+    
+    plt.figure()
+    [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
+    plt.grid()
+    # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
+    plt.title("Block diagonal Pi System")
 
-    return freq, spec
+    # plt.figure()
+    # [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in specs_identity]
+    # # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
+    # plt.title("Block diagonal identity system")
 
+    plt.show()
 
 
 def plainVanilla():
