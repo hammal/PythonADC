@@ -241,6 +241,7 @@ def LowerOrderSystem(system, control, input, order):
     newControl = Control(control.mixingMatrix[:order, :order], control.size, memory=control.memory[:,:order])
     newInput = copy.deepcopy(input)
     newInput.steeringVector = newInput.steeringVector[:order]
+    newSystem.b = newInput.steeringVector
     return newSystem, newControl, newInput
 
 
