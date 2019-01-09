@@ -715,33 +715,6 @@ def checkCovarianceMatrixConvergence(A,b,eta2=1):
     print("Covariance Matrices Converge To: \n%s"   % (V,))
 
 
-# def checkBackwardCovarianceMatrixConvergence(A,b,eta2=1):
-#     # Initialize V_bkw:
-#     V_bkw = np.eye(A.shape[0])
-#     V_tmp = np.zeros_like(V_bkw)
-#     tau = 1e-8
-
-#     print("Checking Backward Covariance Matrices")
-#     k = 0
-#     while not np.allclose(V_bkw,V_tmp):
-#         V_tmp = V_bkw
-#         try:
-#             V_bkw = V_bkw + tau * (-np.dot(A,V_bkw) - np.transpose(np.dot(A,V_bkw)) + np.outer(b,b) - (1./eta2) * np.dot(V_bkw, V_bkw))
-#             print(k, np.linalg.norm(V_bkw - V_tmp))
-#             if k > 10000000:
-#                 print("Timeout")
-#                 exit()
-#             elif np.isnan(np.linalg.norm(V_bkw - V_tmp)):
-#                 print("NAN")
-#                 exit()
-#             k+=1
-#         except FloatingPointError:
-#             print("V_bkw:\n{}\n".format(V_frw))
-#             print("V_bkw.dot(V_bkw):\n{}".format(np.dot(V_bkw, V_bkw)))
-#             return
-#     print("V_bkw condition number: %s" % (np.linalg.cond(V_bkw)))
-#     print("Backward Covariance Matrices Converge!")
-
 def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma_recon_noise=1e-5):
     start_time = time.time()
 
@@ -797,7 +770,6 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         vector = np.zeros(N*M)
         vector[0:M] = beta*(H[:,i])
         input_signals.append(system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector))
-
     input_signals = tuple(input_signals)
 
     print("A = \n%s\nb = \n%s" % (A, vector))
@@ -809,6 +781,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
     # checkCovarianceMatrixConvergence(A,vector)
     # Check Backward Covariance Matrices:
     # checkCovarianceMatrixConvergence(-A,vector)
+
     
     # plt.figure()
     # plt.plot(t,np.sin(2.*np.pi*frequency*t))
@@ -845,6 +818,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
 
 
     c = np.eye(N*M)
+
     sys = system.System(A, c)
     
 
@@ -858,6 +832,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
                                                   'stateBoundInputs': (Ts*beta*kappa)/(1. - (Ts*beta/np.sqrt(M))),
                                                   'num_parallel_converters':M,
                                                   'noise': [{'std':sigma_sim_noise, 'steeringVector': beta*np.eye(N*M)[:,i]}  for i in range(N*M)]})   # /np.sqrt((N+1)*M)
+
 
     # sim_identity = simulator.Simulator(sys_identity, ctrl_identity, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
                                                   # 'noise': [{'std':1., 'steeringVector': np.ones((K+1)*M)}]})
@@ -900,6 +875,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         freq, spec = signal.welch(input_estimates[:,i], 1./Ts, window='hann', axis=0, nperseg = nperseg, nfft = nfft , scaling='density')
         spectrums[i,:] = spec
         # print(freq.shape, spec.shape)
+
         # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
         # plt.legend()
         # plt.show()
@@ -912,9 +888,19 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
         # plt.legend()
         # plt.show()
+    
+    plt.figure()
+    [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
+    plt.grid()
+    # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
+    plt.title("Block diagonal Pi System")
 
-    return freq, spec
+    # plt.figure()
+    # [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in specs_identity]
+    # # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
+    # plt.title("Block diagonal identity system")
 
+    plt.show()
 
 
 def plainVanilla():
@@ -1012,11 +998,7 @@ if __name__ == "__main__":
     
     # plt.grid()
     # plt.legend()
-
     # plt.show()
-
-
-
-
     # multipleInputExperiment()
-    randomWalkPlusSinusoid()
+    # randomWalkPlusSinusoid()
+
