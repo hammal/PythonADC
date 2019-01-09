@@ -560,6 +560,416 @@ def randomWalkPlusSinusoid():
 
 
 
+def multipleInputExperiment():
+    run_time_start = time.time()
+
+    # Input signals, let's try two sinusoids
+    Ts = 80e-6
+    size = 10000
+    nfft = (1<<16)
+    order = 5
+    beta = 6250
+
+    hz_per_bin = 1./(nfft * Ts)
+
+    freq_1 = 420*hz_per_bin
+    phase_1 = np.pi/3.
+    amplitude_1 = 1.
+
+    freq_2 = 700*hz_per_bin
+    phase_2 = np.pi/5.
+    amplitude_2 = 0.5
+
+    print("Frequency 1: {}".format(freq_1))
+    print("Frequency 2: {}".format(freq_2))
+
+    t = np.linspace(0,(size-1)*Ts, size)
+
+    sin_1 = amplitude_1 * np.sin(2.*np.pi*freq_1*t + phase_1)
+    sin_2 = amplitude_2 * np.sin(2.*np.pi*freq_2*t + phase_2)
+
+    sigma_noise = 1e-5
+    random_walk = np.random.randn(size)*sigma_noise
+
+    input_vector_1 = np.zeros(order)
+    input_vector_1[0] = beta
+    input_vector_2 = np.zeros(order)
+    input_vector_2[1] = beta
+    
+    inp_sin_1 = system.Sin(Ts, amplitude=amplitude_1, frequency=freq_1, phase=phase_1, steeringVector=input_vector_1)
+    inp_sin_2 = system.Sin(Ts, amplitude=amplitude_2, frequency=freq_2, phase=phase_2, steeringVector=input_vector_2)
+    inp_random_walk = system.Input(Ts, coefficients=random_walk, steeringVector=np.ones(order))
+
+    A_system = np.eye(order, k=-1)*beta
+    c = np.eye(order)
+    sys = system.System(A_system, c)
+
+    kappa = 1.
+
+    mixingMatrix = - kappa * beta * np.eye(order)
+    ctrl_only_sin_1 = system.Control(mixingMatrix, size)
+    ctrl_only_sin_2 = system.Control(mixingMatrix, size)
+    ctrl_sin_1_plus_sin_2 = system.Control(mixingMatrix, size)
+
+    ctrl_sin_1_plus_random_walk = system.Control(mixingMatrix, size)
+
+    sim_only_sin_1 = simulator.Simulator(sys, ctrl_only_sin_1, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.})
+    sim_only_sin_2 = simulator.Simulator(sys, ctrl_only_sin_2, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.})
+    sim_sin_1_plus_sin_2 = simulator.Simulator(sys, ctrl_sin_1_plus_sin_2, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.})
+    sim_sin_1_plus_random_walk = simulator.Simulator(sys, ctrl_sin_1_plus_random_walk, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.})
+    
+    res_only_sin_1 = sim_only_sin_1.simulate(t, (inp_sin_1,))
+    res_only_sin_2 = sim_only_sin_2.simulate(t, (inp_sin_2,))
+    res_sim_sin_1_plus_sin_2 = sim_sin_1_plus_sin_2.simulate(t, (inp_sin_1, inp_sin_2))
+    res_sin_1_plus_random_walk = sim_sin_1_plus_random_walk.simulate(t, (inp_sin_1, inp_random_walk))
+
+
+    eta2 = np.ones(order)
+
+    options = {'eta2':eta2,
+               'sigmaU2':[1., 25e-3]}
+               #'noise':[{'std':1e-5, 'steeringVector':np.ones(order),'name':'Bastard'}]}
+    options2 = {'eta2':eta2,
+               'sigmaU2':[1.]}
+
+    recon_only_sin_1 = reconstruction.WienerFilter(t, sys, (inp_sin_1,), options2)
+    recon_only_sin_2 = reconstruction.WienerFilter(t, sys, (inp_sin_2,), options2)
+    recon_sin_1_plus_sin_2 = reconstruction.WienerFilter(t, sys, (inp_sin_1, inp_sin_2), options)
+    recon_sin_1_plus_random_walk = reconstruction.WienerFilter(t, sys, (inp_sin_1, inp_random_walk), options)
+    
+    
+    u_hat_sin_1 = recon_only_sin_1.filter(ctrl_only_sin_1)
+    u_hat_sin_2 = recon_only_sin_2.filter(ctrl_only_sin_2)
+    u_hat_sin_1_plus_sin_2 = recon_sin_1_plus_sin_2.filter(ctrl_sin_1_plus_sin_2)
+    u_hat_sin_1_plus_random_walk = recon_sin_1_plus_random_walk.filter(ctrl_sin_1_plus_random_walk)
+
+    plt.plot(t, u_hat_sin_1_plus_sin_2[:,0], alpha=0.7, label="f = {}".format(freq_1))
+    plt.plot(t, u_hat_sin_1_plus_sin_2[:,1], alpha=0.7, label="f = {}".format(freq_2))
+    # plt.plot(t, u_hat_sin_1_plus_sin_2[:,2], alpha=0.7, label="Random Walk")
+
+    print("Squared norm: {}".format(np.linalg.norm(u_hat_sin_1_plus_sin_2[:,0] - u_hat_sin_1_plus_sin_2[:,1])))
+
+    plt.figure()
+    # inp_sin = system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
+    # input_random_walk = system.Input(Ts, coefficients=inp_rand_coeffs, steeringVector=np.ones(order))
+    # corrupted_sinusoid = system.Input(Ts, coefficients=inp_rand_coeffs + inp_sin_coeffs, steeringVector=vector)
+
+    # inp_sin_coeffs = amplitude * np.sin(2.*np.pi*frequency*t + phase)
+    # inp_rand_coeffs = np.random.randn(size)*sigma_noise
+
+    # plt.plot(t,sin_1)
+    # plt.figure()
+    
+    freq, spec_sin_1 = signal.welch(u_hat_sin_1, 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    freq, spec_sin_2 = signal.welch(u_hat_sin_2, 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    freq, spec_sin_1_2 = signal.welch(u_hat_sin_1_plus_sin_2[:,0], 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    freq, spec_sin_2_2 = signal.welch(u_hat_sin_1_plus_sin_2[:,1], 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    freq, spec_sin_1_no_random_walk = signal.welch(u_hat_sin_1_plus_random_walk[:,0], 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    freq, spec_random_walk_no_sin_1 = signal.welch(u_hat_sin_1_plus_random_walk[:,1], 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    # freq, spec_random_walk = signal.welch(u_hat_sin_1_plus_sin_2[:,2], 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+
+    plt.semilogx(freq, 10*np.log10(np.abs(spec_sin_1)), label="$f = {:.2f}$Hz".format(freq_1), alpha=0.7)
+    plt.semilogx(freq, 10*np.log10(np.abs(spec_sin_2)), label="$f = {:.2f}$Hz".format(freq_2), alpha=0.7)
+    plt.semilogx(freq, 10*np.log10(np.abs(spec_sin_1_2)), label="$f_1 = {:.2f}$Hz".format(freq_1), alpha=0.7)
+    plt.semilogx(freq, 10*np.log10(np.abs(spec_sin_2_2)), label="$f_2 = {:.2f}$Hz".format(freq_2), alpha=0.7)
+    plt.legend()
+
+    plt.figure()
+    plt.semilogx(freq, 10*np.log10(np.abs(spec_sin_1_no_random_walk)), label="$f_2 = {:.2f}$Hz".format(freq_1), alpha=0.7)
+    plt.semilogx(freq, 10*np.log10(np.abs(spec_random_walk_no_sin_1)), label="Random walk", alpha=0.7)    
+    # plt.semilogx(freq, 10*np.log10(np.abs(spec_random_walk)), label="Random Walk", alpha=0.7)
+
+    print("Run time: {} seconds".format(time.time() - run_time_start))
+
+    plt.legend()
+    plt.show()
+
+
+def hadamardMatrix(n):
+    return sp.linalg.hadamard(n)/np.sqrt(n)
+
+
+np.seterr(all='raise')
+
+def checkForwardCovarianceMatrixConvergence(A,b,eta2=1):
+    # Initialize V_frw:
+    V_frw = np.eye(A.shape[0])
+    V_tmp = np.zeros_like(V_frw)
+    tau = 1e-8
+
+    print("Checking Forward Covariance Matrices")
+    k = 0
+    while not np.allclose(V_frw,V_tmp):
+        V_tmp = V_frw
+        try:
+            V_frw = V_frw + tau * (np.dot(A,V_frw) + np.transpose(np.dot(A,V_frw)) + np.outer(b,b) - (1./eta2) * np.dot(V_frw, V_frw))
+            # print(np.linalg.norm(V_frw - V_tmp))
+            # if k > 500000:
+            #     exit()
+            # k+=1
+        except FloatingPointError:
+            print("V_frw:\n{}\n".format(V_frw))
+            print("V_frw.dot(V_frw):\n{}".format(np.dot(V_frw, V_frw)))
+            return
+    print("V_frw condition number: %s" % (np.linalg.cond(V_frw)))
+    print("Forward Covariance Matrices Converge!")
+
+
+def checkBackwardCovarianceMatrixConvergence(A,b,eta2=1):
+    # Initialize V_bkw:
+    V_bkw = np.eye(A.shape[0])
+    V_tmp = np.zeros_like(V_bkw)
+    tau = 1e-8
+
+    print("Checking Backward Covariance Matrices")
+    k = 0
+    while not np.allclose(V_bkw,V_tmp):
+        V_tmp = V_bkw
+        try:
+            V_bkw = V_bkw + tau * (-np.dot(A,V_bkw) - np.transpose(np.dot(A,V_bkw)) + np.outer(b,b) - (1./eta2) * np.dot(V_bkw, V_bkw))
+            print(k, np.linalg.norm(V_bkw - V_tmp))
+            if k > 10000000:
+                print("Timeout")
+                exit()
+            elif np.isnan(np.linalg.norm(V_bkw - V_tmp)):
+                print("NAN")
+                exit()
+            k+=1
+        except FloatingPointError:
+            print("V_bkw:\n{}\n".format(V_frw))
+            print("V_bkw.dot(V_bkw):\n{}".format(np.dot(V_bkw, V_bkw)))
+            return
+    print("V_bkw condition number: %s" % (np.linalg.cond(V_bkw)))
+    print("Backward Covariance Matrices Converge!")
+
+def piBlockSystem():
+    start_time = time.time()
+
+    size = 20000    # Number of samples in the simulation
+    M = (1<<1)      # Number of parallel controlnverters
+    N = 4           # Number of PI mixing submatrices
+    Ts = 8e-5       # Sampling period
+    num_inputs = 1
+    t = np.linspace(0,(size-1)*Ts, size)    # Time grid for control updates
+
+    beta = 7250
+    kappa = 1
+
+    stability = Ts*beta*(1/np.sqrt(M) + kappa) <= 1
+    print("Stability margin: {}".format(1. - Ts*beta*(1/np.sqrt(M) + kappa)))
+    print("Stability criterion: {}".format(stability))
+
+    H = hadamardMatrix(M)
+
+    pi_j_1 = H[:,0]
+    # pi_j_2 = H[:,1]
+    L = 1
+    
+    
+
+    
+    A = np.zeros(((N+1)*M, (N+1)*M))
+    MixingPi = np.empty((N,M,M))
+    for k in range(N):
+        MixingPi[k] = beta*np.outer(H[:,0],H[:,0])
+        # (beta)*(0.2*np.outer(H[:,0],H[:,0])
+        #                        + 0.1*np.outer(H[:,1],H[:,1])
+        #                        + 0.3*np.outer(H[:,2],H[:,2])
+        #                        + 0.4*np.outer(H[:,3],H[:,3]))  # Index set = {0,0}
+        A[(k+1)*M:(k+2)*M, (k)*M:(k+1)*M] = MixingPi[k]
+
+
+    # for i in range(A.shape[0]):
+    #     A[i,i] = 1e-5
+
+    nperseg = (1<<16)
+    selected_FFT_bin = 250.
+
+    input_signals = []
+    frequencies = []
+    # sins = np.empty((M,size))
+    for i in range(num_inputs):
+        amplitude = 1
+        frequency = (i+1)*(selected_FFT_bin/(nperseg*Ts))#(1./Ts)/(10000*(i+1))
+        print("{} Hz".format(frequency))
+        # size = 
+        frequencies.append(frequency)
+        phase = 0#np.random.rand()*np.pi
+        vector = np.zeros((N+1)*M)
+        vector[0:M] = beta*(H[:,i])#+0.5*H[:,i+1]) #(0.4*H[:,i] + 0.1* H[:,i+1]+ 0.1* H[:,i+2]+ 0.4* H[:,i+3])
+        input_signals.append(system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector))
+
+    input_signals = tuple(input_signals)
+
+    # checkForwardCovarianceMatrixConvergence(A,vector)
+    checkBackwardCovarianceMatrixConvergence(A,vector)
+
+    exit()
+    
+    # plt.figure()
+    # plt.plot(t,np.sin(2.*np.pi*frequency*t))
+    # plt.show()
+    # exit()
+    
+
+
+
+    # for i in range(1,N+1):
+    #     A[i*M:(i+1)*M,i*M:(i+1)*M] = MixingPi[i-1]
+
+    
+    
+
+    # tmp_2 = np.hstack( (Pi_1, np.zeros( (Pi_1.shape[0], (K+1)*M - Pi_1.shape[1]))) )
+    # tmp_3 = np.hstack( (np.zeros((M, Pi_1.shape[1])), Pi_2, np.zeros( (M, (K+1)*M - Pi_1.shape[1]-Pi_2.shape[1]) ) ) )
+    # for j in range(K):
+    #     tmp = np.zeros((M,(K+1)*M))
+    #     # print("{}:{}".format(M*j,M*j+M))
+    #     tmp[0:M, M*j:M*j + M] = Pi_1
+    #     A = np.vstack((A, tmp))
+    # A = np.vstack((tmp_1, tmp_2, tmp_3))
+
+    # tmp_2_identity = np.hstack( (np.eye(Pi_1.shape[0])*beta, np.zeros( (Pi_1.shape[0], (K+1)*M - Pi_1.shape[1]))) )
+    # tmp_3_identity = np.hstack( (np.zeros((M, Pi_1.shape[1])), np.eye(Pi_2.shape[0])*beta, np.zeros( (M, (K+1)*M - Pi_1.shape[1]-Pi_2.shape[1]) ) ) )
+    # A_identity = np.vstack((tmp_1, tmp_2_identity, tmp_3_identity))
+    
+    # A_identity = np.zeros(((N+1)*M, (N+1)*M))
+    # for j in range(K):
+    #     tmp = np.zeros((M,(N+1)*M))
+    #     tmp[0:M, M*j:M*j + M] = np.eye(M)
+    #     A_identity = np.vstack((A_identity, tmp))
+
+
+    c = np.eye((N+1)*M)
+    sys = system.System(A, c)
+    
+
+    # sys_identity = system.System(A_identity, c)
+
+    mixingMatrix = - kappa * beta * np.eye((N+1)*M)
+    ctrl = system.Control(mixingMatrix, size)
+    # ctrl_identity = system.Control(mixingMatrix, size)
+
+    sim = simulator.Simulator(sys, ctrl, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
+                                                  'noise': [{'std':1e-4, 'steeringVector': np.ones((N+1)*M)}]})   # /np.sqrt((N+1)*M)
+
+    # sim_identity = simulator.Simulator(sys_identity, ctrl_identity, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
+                                                  # 'noise': [{'std':1., 'steeringVector': np.ones((K+1)*M)}]})
+
+
+    res = sim.simulate(t, input_signals)
+    # res_identity = sim_identity.simulate(t, tuple(input_signals))
+
+    # plt.figure()
+    # plt.plot(res['t'], res['output'])
+    # plt.legend(["%s" % x for x in range(res['output'].shape[0])])
+    # plt.title("Block diagonal Pi System")
+    # plt.show()
+    # exit()
+    
+    # plt.figure()
+    # plt.plot(res_identity['t'], res_identity['output'])
+    # plt.title("Block diagonal identity System")
+
+    eta2 = np.ones((N+1)*M)
+
+    # sigmaU2 = np.zeros((N+1)*M)
+    # sigmaU2[0:M] = 1.
+    options = {'eta2':eta2,
+               'sigmaU2':[1.,1.,1.,1.],
+               'noise':[{'std': 1., 'steeringVector': np.ones((N+1)*M), 'name':'Bastard'}]} # /np.sqrt((N+1)*M)
+
+    recon = reconstruction.WienerFilter(t, sys, input_signals, options)
+    input_estimates = recon.filter(ctrl)
+
+    # recon_identity = reconstruction.WienerFilter(t, sys_identity, tuple(input_signals), options)
+    # input_estimates_identity = recon.filter(ctrl_identity)
+
+    print("Run Time: {} seconds".format(time.time()-start_time))
+
+    nfft = (1<<16)
+    spectrums = np.empty((num_inputs, nfft//2 + 1))
+    for i in range(num_inputs):
+        freq, spec = signal.welch(input_estimates[:,i], 1./Ts, axis=0, nperseg = nperseg, nfft = nfft, scaling='density')
+        spectrums[i,:] = spec
+
+        # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
+        # plt.legend()
+        # plt.show()
+
+    # specs_identity = np.empty((M, nfft//2 + 1))
+    # for i in range(M):
+    #     freq, spec = signal.welch(input_estimates[:,i], 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+    #     specs_identity[i,:] = spec
+
+        # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
+        # plt.legend()
+        # plt.show()
+
+    
+    plt.figure()
+    [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
+    plt.grid()
+    # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
+    plt.title("Block diagonal Pi System")
+
+    # plt.figure()
+    # [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in specs_identity]
+    # # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
+    # plt.title("Block diagonal identity system")
+
+    plt.show()
+
+
+def plainVanilla():
+    Ts = 80e-6
+    beta = 6250
+    order = 5
+    size = 20000
+
+    frequency = 80
+    amplitude = 1.
+    phase = pi * 7. / 8. # Rad
+    vector = np.zeros(order)
+    vector[0] = beta
+
+    kappa = 1.
+    t = np.linspace(0, (size-1)*Ts, size)
+
+    stability = Ts*beta*(1 + kappa) <= 1
+    print("Stability criterion: {}".format(stability))
+
+    inp = system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector)
+
+    A = np.eye(order, k=-1)*beta
+    c = np.eye(order)
+    sys = system.System(A,c)
+
+    checkCovarianceMatrixConvergence(A,vector)
+
+    mixingMatrix = - kappa * beta * np.eye(order)
+    ctrl = system.Control(mixingMatrix, size)
+
+    sim = simulator.Simulator(sys, ctrl, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
+                                                  'noise': [{'std':1., 'steeringVector': np.ones(order)}]})
+    res = sim.simulate(t, (inp,))
+
+    eta2 = np.ones(order)
+    options = {'eta2':eta2,
+               'sigmaU2':[1.],
+               'noise':[{'std': 1., 'steeringVector': np.ones(order), 'name':'Bastard'}]}
+
+    recon = reconstruction.WienerFilter(t, sys, (inp,), options)
+    input_estimates = recon.filter(ctrl)
+
+    nfft = (1<<16)
+    freq, spec = signal.welch(input_estimates, 1./Ts, axis=0, nperseg = (1<<12), nfft = nfft, scaling='density')
+
+    plt.figure()
+    plt.semilogx(freq, 10*np.log10(np.abs(spec)))
+    plt.grid()
+    plt.show()
+
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="")
@@ -572,5 +982,8 @@ if __name__ == "__main__":
 
     args = vars(arg_parser.parse_args())
 
-    randomWalkPlusSinusoid()
+    # plainVanilla()
+    piBlockSystem()
+    # multipleInputExperiment()
+    # randomWalkPlusSinusoid()
     # main(**args)
