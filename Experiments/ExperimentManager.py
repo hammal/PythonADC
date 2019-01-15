@@ -714,6 +714,7 @@ def checkCovarianceMatrixConvergence(A,b,eta2=1):
     print("Covariance Matrices Converge To: \n%s"   % (V,))
 
 
+
 def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma_recon_noise=1e-5):
     start_time = time.time()
 
@@ -773,6 +774,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
 
     print("A = \n%s\nb = \n%s" % (A, vector))
 
+
     print("Gain factor: beta*L/sqrt(L) = {}".format(beta*np.sqrt(M)))
     print("Predicted SNR increase over Gain factor = beta: {} dB".format(10*np.log10(1./np.sqrt(L))*2*(N-1)))
 
@@ -786,8 +788,6 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
     # plt.plot(t,np.sin(2.*np.pi*frequency*t))
     # plt.show()
     # exit()
-    
-
 
 
     # for i in range(1,N+1):
@@ -887,19 +887,16 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
         # plt.legend()
         # plt.show()
-    
+
     plt.figure()
     [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
     plt.grid()
     # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
     plt.title("Block diagonal Pi System")
 
-    # plt.figure()
-    # [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in specs_identity]
-    # # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
-    # plt.title("Block diagonal identity system")
+    return freq, spec
 
-    plt.show()
+
 
 
 def plainVanilla():
@@ -997,7 +994,16 @@ if __name__ == "__main__":
     
     # plt.grid()
     # plt.legend()
+<<<<<<< HEAD
     # plt.show()
+=======
+
+    # plt.show()
+
+
+
+
+>>>>>>> moving forward
     # multipleInputExperiment()
     # randomWalkPlusSinusoid()
 
