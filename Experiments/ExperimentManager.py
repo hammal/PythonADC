@@ -691,120 +691,124 @@ def hadamardMatrix(n):
 
 np.seterr(all='raise')
 
-def checkForwardCovarianceMatrixConvergence(A,b,eta2=1):
-    # Initialize V_frw:
-    V_frw = np.eye(A.shape[0])
-    V_tmp = np.zeros_like(V_frw)
+def checkCovarianceMatrixConvergence(A,b,eta2=1):
+    # Initialize Covariance matrix as identity:
+    V = np.eye(A.shape[0])*1e5
+    V_tmp = np.zeros_like(V)
     tau = 1e-8
 
-    print("Checking Forward Covariance Matrices")
+    print("Checking Covariance Matrices")
     k = 0
-    while not np.allclose(V_frw,V_tmp):
-        V_tmp = V_frw
+    while not np.allclose(V,V_tmp):
+        V_tmp = V
         try:
-            V_frw = V_frw + tau * (np.dot(A,V_frw) + np.transpose(np.dot(A,V_frw)) + np.outer(b,b) - (1./eta2) * np.dot(V_frw, V_frw))
+            V = V + tau * (np.dot(A,V) + np.transpose(np.dot(A,V)) + np.outer(b,b) - (1./eta2) * np.dot(V, V))
             # print(np.linalg.norm(V_frw - V_tmp))
             # if k > 500000:
             #     exit()
             # k+=1
         except FloatingPointError:
-            print("V_frw:\n{}\n".format(V_frw))
-            print("V_frw.dot(V_frw):\n{}".format(np.dot(V_frw, V_frw)))
+            print("V_frw:\n{}\n".format(V))
+            print("V_frw.dot(V_frw):\n{}".format(np.dot(V, V)))
             return
-    print("V_frw condition number: %s" % (np.linalg.cond(V_frw)))
-    print("Forward Covariance Matrices Converge!")
+    print("V condition number: %s" % (np.linalg.cond(V)))
+    print("Covariance Matrices Converge To: \n%s"   % (V,))
 
 
-def checkBackwardCovarianceMatrixConvergence(A,b,eta2=1):
-    # Initialize V_bkw:
-    V_bkw = np.eye(A.shape[0])
-    V_tmp = np.zeros_like(V_bkw)
-    tau = 1e-8
+# def checkBackwardCovarianceMatrixConvergence(A,b,eta2=1):
+#     # Initialize V_bkw:
+#     V_bkw = np.eye(A.shape[0])
+#     V_tmp = np.zeros_like(V_bkw)
+#     tau = 1e-8
 
-    print("Checking Backward Covariance Matrices")
-    k = 0
-    while not np.allclose(V_bkw,V_tmp):
-        V_tmp = V_bkw
-        try:
-            V_bkw = V_bkw + tau * (-np.dot(A,V_bkw) - np.transpose(np.dot(A,V_bkw)) + np.outer(b,b) - (1./eta2) * np.dot(V_bkw, V_bkw))
-            print(k, np.linalg.norm(V_bkw - V_tmp))
-            if k > 10000000:
-                print("Timeout")
-                exit()
-            elif np.isnan(np.linalg.norm(V_bkw - V_tmp)):
-                print("NAN")
-                exit()
-            k+=1
-        except FloatingPointError:
-            print("V_bkw:\n{}\n".format(V_frw))
-            print("V_bkw.dot(V_bkw):\n{}".format(np.dot(V_bkw, V_bkw)))
-            return
-    print("V_bkw condition number: %s" % (np.linalg.cond(V_bkw)))
-    print("Backward Covariance Matrices Converge!")
+#     print("Checking Backward Covariance Matrices")
+#     k = 0
+#     while not np.allclose(V_bkw,V_tmp):
+#         V_tmp = V_bkw
+#         try:
+#             V_bkw = V_bkw + tau * (-np.dot(A,V_bkw) - np.transpose(np.dot(A,V_bkw)) + np.outer(b,b) - (1./eta2) * np.dot(V_bkw, V_bkw))
+#             print(k, np.linalg.norm(V_bkw - V_tmp))
+#             if k > 10000000:
+#                 print("Timeout")
+#                 exit()
+#             elif np.isnan(np.linalg.norm(V_bkw - V_tmp)):
+#                 print("NAN")
+#                 exit()
+#             k+=1
+#         except FloatingPointError:
+#             print("V_bkw:\n{}\n".format(V_frw))
+#             print("V_bkw.dot(V_bkw):\n{}".format(np.dot(V_bkw, V_bkw)))
+#             return
+#     print("V_bkw condition number: %s" % (np.linalg.cond(V_bkw)))
+#     print("Backward Covariance Matrices Converge!")
 
-def piBlockSystem():
+def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma_recon_noise=1e-5):
     start_time = time.time()
 
-    size = 20000    # Number of samples in the simulation
-    M = (1<<1)      # Number of parallel controlnverters
-    N = 4           # Number of PI mixing submatrices
     Ts = 8e-5       # Sampling period
+    num_periods_generated = 10
+    size = round(num_periods_generated/Ts)    # Number of samples in the simulation
+    print("# Samples in the simulation: %s" % (size,))
     num_inputs = 1
     t = np.linspace(0,(size-1)*Ts, size)    # Time grid for control updates
 
-    beta = 7250
-    kappa = 1
-
-    stability = Ts*beta*(1/np.sqrt(M) + kappa) <= 1
-    print("Stability margin: {}".format(1. - Ts*beta*(1/np.sqrt(M) + kappa)))
-    print("Stability criterion: {}".format(stability))
-
-    H = hadamardMatrix(M)
-
-    pi_j_1 = H[:,0]
-    # pi_j_2 = H[:,1]
-    L = 1
-    
+    kappa = 1#np.sqrt(L)
+    beta = 6250#1. / (Ts * (1/np.sqrt(M) + kappa))
+    print("beta = {}".format(beta))
     
 
+    print("Input Stability Margin: {}".format(1. - Ts*beta*(1/np.sqrt(M) + kappa)))
+    print("Internal Stability Margin: {}".format(1 - Ts*beta*(np.sqrt(L) + kappa)))
     
-    A = np.zeros(((N+1)*M, (N+1)*M))
-    MixingPi = np.empty((N,M,M))
-    for k in range(N):
-        MixingPi[k] = beta*np.outer(H[:,0],H[:,0])
-        # (beta)*(0.2*np.outer(H[:,0],H[:,0])
-        #                        + 0.1*np.outer(H[:,1],H[:,1])
-        #                        + 0.3*np.outer(H[:,2],H[:,2])
-        #                        + 0.4*np.outer(H[:,3],H[:,3]))  # Index set = {0,0}
-        A[(k+1)*M:(k+2)*M, (k)*M:(k+1)*M] = MixingPi[k]
+    print("Input Stability criterion: {}".format(Ts*beta*(1/np.sqrt(M) + kappa) <= 1))
+    print("Internal Stability criterion: {}".format(Ts*beta*(np.sqrt(L) + kappa) <= 1))
 
+    H = hadamardMatrix(M)   
+    
 
-    # for i in range(A.shape[0]):
-    #     A[i,i] = 1e-5
+    A = np.zeros((N*M, N*M))
+    MixingPi = np.empty((N-1,M,M))
 
-    nperseg = (1<<16)
-    selected_FFT_bin = 250.
+    
+    if L == 4:
+        if N > 1:
+            for k in range(N-1):
+                MixingPi[k] = beta*(np.outer(H[:,0],H[:,0])*L)/np.sqrt(L)
+                A[(k+1)*M:(k+2)*M, (k)*M:(k+1)*M] = MixingPi[k]
+    else:
+        if N > 1:
+            for k in range(N-1):
+                MixingPi[k] = beta*(sum(np.outer(H[:,i],H[:,i]) for i in range(M)))
+                A[(k+1)*M:(k+2)*M, (k)*M:(k+1)*M] = MixingPi[k]
+
+    nfft = (1<<16)
+    selected_FFT_bin = 5
+    nperseg = (1<<10)
 
     input_signals = []
     frequencies = []
-    # sins = np.empty((M,size))
     for i in range(num_inputs):
-        amplitude = 1
-        frequency = (i+1)*(selected_FFT_bin/(nperseg*Ts))#(1./Ts)/(10000*(i+1))
-        print("{} Hz".format(frequency))
+        amplitude = 0
+        frequency = (i+1)*(selected_FFT_bin/(nperseg*Ts))
+        print("Sinusoid frequency: {} Hz".format(frequency))
         # size = 
         frequencies.append(frequency)
-        phase = 0#np.random.rand()*np.pi
-        vector = np.zeros((N+1)*M)
-        vector[0:M] = beta*(H[:,i])#+0.5*H[:,i+1]) #(0.4*H[:,i] + 0.1* H[:,i+1]+ 0.1* H[:,i+2]+ 0.4* H[:,i+3])
+        phase = 0
+        vector = np.zeros(N*M)
+        vector[0:M] = beta*(H[:,i])
         input_signals.append(system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=vector))
 
     input_signals = tuple(input_signals)
 
-    # checkForwardCovarianceMatrixConvergence(A,vector)
-    checkBackwardCovarianceMatrixConvergence(A,vector)
+    print("A = \n%s\nb = \n%s" % (A, vector))
 
-    exit()
+    print("Gain factor: beta*L/sqrt(L) = {}".format(beta*np.sqrt(M)))
+    print("Predicted SNR increase over Gain factor = beta: {} dB".format(10*np.log10(1./np.sqrt(L))*2*(N-1)))
+
+    # Check Forward Covariance Matrices:
+    # checkCovarianceMatrixConvergence(A,vector)
+    # Check Backward Covariance Matrices:
+    # checkCovarianceMatrixConvergence(-A,vector)
     
     # plt.figure()
     # plt.plot(t,np.sin(2.*np.pi*frequency*t))
@@ -840,18 +844,20 @@ def piBlockSystem():
     #     A_identity = np.vstack((A_identity, tmp))
 
 
-    c = np.eye((N+1)*M)
+    c = np.eye(N*M)
     sys = system.System(A, c)
     
 
     # sys_identity = system.System(A_identity, c)
 
-    mixingMatrix = - kappa * beta * np.eye((N+1)*M)
+    mixingMatrix = - kappa * beta * np.eye(N*M)
     ctrl = system.Control(mixingMatrix, size)
     # ctrl_identity = system.Control(mixingMatrix, size)
 
-    sim = simulator.Simulator(sys, ctrl, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
-                                                  'noise': [{'std':1e-4, 'steeringVector': np.ones((N+1)*M)}]})   # /np.sqrt((N+1)*M)
+    sim = simulator.Simulator(sys, ctrl, options={'stateBound': (Ts*beta*kappa)/(1. - (Ts*beta/np.sqrt(L))),
+                                                  'stateBoundInputs': (Ts*beta*kappa)/(1. - (Ts*beta/np.sqrt(M))),
+                                                  'num_parallel_converters':M,
+                                                  'noise': [{'std':sigma_sim_noise, 'steeringVector': beta*np.eye(N*M)[:,i]}  for i in range(N*M)]})   # /np.sqrt((N+1)*M)
 
     # sim_identity = simulator.Simulator(sys_identity, ctrl_identity, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
                                                   # 'noise': [{'std':1., 'steeringVector': np.ones((K+1)*M)}]})
@@ -860,24 +866,26 @@ def piBlockSystem():
     res = sim.simulate(t, input_signals)
     # res_identity = sim_identity.simulate(t, tuple(input_signals))
 
-    # plt.figure()
-    # plt.plot(res['t'], res['output'])
-    # plt.legend(["%s" % x for x in range(res['output'].shape[0])])
-    # plt.title("Block diagonal Pi System")
-    # plt.show()
+    fig, ax = plt.subplots()
+    ax.plot(res['t'], res['output'])
+    plt.legend(["%s" % x for x in range(res['output'].shape[0])])
+    plt.title("Block diagonal Pi System")
+    plt.savefig("./data/Tuesday 15.1.2019/SimulationOutput_M={}_N={}_L={}.png".format(M,N,L), dpi=300, format='png')    #M=1, N=1, L=1
+    plt.close(fig)
+
     # exit()
     
     # plt.figure()
     # plt.plot(res_identity['t'], res_identity['output'])
     # plt.title("Block diagonal identity System")
 
-    eta2 = np.ones((N+1)*M)
+    eta2 = np.ones(N*M) * eta2_magnitude
 
     # sigmaU2 = np.zeros((N+1)*M)
     # sigmaU2[0:M] = 1.
     options = {'eta2':eta2,
-               'sigmaU2':[1.,1.,1.,1.],
-               'noise':[{'std': 1., 'steeringVector': np.ones((N+1)*M), 'name':'Bastard'}]} # /np.sqrt((N+1)*M)
+               'sigmaU2':[1.],
+               'noise':[{'std': sigma_recon_noise, 'steeringVector': beta*np.eye(N*M)[:,i], 'name':'noise_{}'.format(i)} for i in range(N*M)]} # /np.sqrt((N+1)*M)
 
     recon = reconstruction.WienerFilter(t, sys, input_signals, options)
     input_estimates = recon.filter(ctrl)
@@ -887,12 +895,11 @@ def piBlockSystem():
 
     print("Run Time: {} seconds".format(time.time()-start_time))
 
-    nfft = (1<<16)
     spectrums = np.empty((num_inputs, nfft//2 + 1))
     for i in range(num_inputs):
-        freq, spec = signal.welch(input_estimates[:,i], 1./Ts, axis=0, nperseg = nperseg, nfft = nfft, scaling='density')
+        freq, spec = signal.welch(input_estimates[:,i], 1./Ts, window='hann', axis=0, nperseg = nperseg, nfft = nfft , scaling='density')
         spectrums[i,:] = spec
-
+        # print(freq.shape, spec.shape)
         # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="$f = {:.2f}$Hz".format(frequencies[i]), alpha=0.7)
         # plt.legend()
         # plt.show()
@@ -906,19 +913,8 @@ def piBlockSystem():
         # plt.legend()
         # plt.show()
 
-    
-    plt.figure()
-    [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
-    plt.grid()
-    # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
-    plt.title("Block diagonal Pi System")
+    return freq, spec
 
-    # plt.figure()
-    # [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in specs_identity]
-    # # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
-    # plt.title("Block diagonal identity system")
-
-    plt.show()
 
 
 def plainVanilla():
@@ -972,17 +968,55 @@ def plainVanilla():
 
 
 if __name__ == "__main__":
-    arg_parser = argparse.ArgumentParser(description="")
-    arg_parser.add_argument("--jitterAsGaussianNoise", type=bool, default=False)
-    arg_parser.add_argument("--jitterAmount", type=float, default=0)
-    arg_parser.add_argument("--sigma_jitter", type=float, default=0)
-    arg_parser.add_argument("--sigma_noise", type=float, default=0)
-    arg_parser.add_argument("--boolSim", type=bool, default=False)
-    arg_parser.add_argument("--boolRec", type=bool, default=False)
+    # arg_parser = argparse.ArgumentParser(description="")
+    # arg_parser.add_argument("--jitterAsGaussianNoise", type=bool, default=False)
+    # arg_parser.add_argument("--jitterAmount", type=float, default=0)
+    # arg_parser.add_argument("--sigma_jitter", type=float, default=0)
+    # arg_parser.add_argument("--sigma_noise", type=float, default=0)
+    # arg_parser.add_argument("--boolSim", type=bool, default=False)
+    # arg_parser.add_argument("--boolRec", type=bool, default=False)
 
-    args = vars(arg_parser.parse_args())
+    # args = vars(arg_parser.parse_args())
 
-    # plainVanilla()
-    piBlockSystem()
+
+    # plt.figure()
+    num_parallel_convs = [4]    # M
+    specs = np.empty((len(num_parallel_convs),(1<<15)+1))
+
+    # L = 1
+    # N = 1
+
+    sigma_sim_noise=1e-4
+    sigma_recon_noise=1e-4
+    eta2_magnitude = 1e1
+
+    for N in [2]:
+        for L in [1]:
+            for i,M in enumerate(num_parallel_convs):
+                if (M==1 and L!=1): continue
+                print("L = {}\nN = {}\nM = {}".format(L,N,M))
+                freq, spec = piBlockSystem(M=M,
+                                           N=N,
+                                           L=L,
+                                           eta2_magnitude=eta2_magnitude,
+                                           sigma_sim_noise=sigma_sim_noise,
+                                           sigma_recon_noise=sigma_recon_noise)
+                # freqs[i,:] = freq
+                specs[i,:] = spec
+                # plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="M={}, N={}, L={}".format(M,N,L))
+
+
+            df = pd.DataFrame({M: specs[i,:] for i,M in enumerate(num_parallel_convs)}, index=freq)
+            df.to_csv("./data/Tuesday 15.1.2019/PSD_eta={}_M={}_N={}_beta=6250_L={}_forthtry.csv".format(eta2_magnitude,M,N,L))
+
+    
+    # plt.grid()
+    # plt.legend()
+
+    # plt.show()
+
+
+
+
     # multipleInputExperiment()
     randomWalkPlusSinusoid()
