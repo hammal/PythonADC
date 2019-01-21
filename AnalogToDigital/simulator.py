@@ -7,6 +7,7 @@ import scipy
 from scipy.optimize import minimize
 from scipy.integrate import odeint
 import sdeint
+import time
 
 
 class Simulator(object):
@@ -27,6 +28,13 @@ class Simulator(object):
             print("Initial state set: %s" % self.state)
 
         self.options = options
+        self.logstr = ""
+        self.log("Simulation started!")
+
+
+    def log(self,message=""):
+        tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)
+        self.logstr += tmp
 
 
     def simulate(self, t, inputs=None):
@@ -126,13 +134,17 @@ class Simulator(object):
             # print(self.state)
 
             # Clip if state is out of bound
-            if False:
+            if True:
                 bound = 1.
                 above = self.state > bound
                 below = self.state < -bound
 
                 self.state[above] = bound
                 self.state[below] = -bound
+
+                oob_states = np.arange(self.system.order)[above or below]
+                if any(oob_states):
+                    self.log("STATE BOUND EXCEEDED! X_{} = {}".format(oob_states, self.state[oob_states]))
 
             # print(self.state)
             self.control.update(self.state)
@@ -145,7 +157,7 @@ class Simulator(object):
             'system': self.system,
             'state': self.state,
             'options': self.options,
-        }
+        }, self.logstr
 
 
 # class autoControlSimulator(object):
