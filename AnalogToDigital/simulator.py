@@ -152,6 +152,10 @@ class Simulator(object):
                 if any(oob_states):
                     self.log("STATE BOUND EXCEEDED! X_{} = {}".format(oob_states, self.state[oob_states]))
 
+                oob_states = np.arange(self.system.order)[above or below]
+                if any(oob_states):
+                    self.log("STATE BOUND EXCEEDED! X_{} = {}".format(oob_states, self.state[oob_states]))
+
             # print(self.state)
             current_sample += 1
             self.control.update(self.state)

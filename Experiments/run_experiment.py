@@ -1,6 +1,5 @@
 #!/home/olafurt/miniconda3/bin/python
 
-
 ###############################
 #      Standard Packages      #
 ###############################
@@ -333,6 +332,7 @@ class ExperimentRunner():
         #   print(f'sum(B_{i}) = {sum(self.ctrlMixingMatrix[:,i])}')
         self.ctrl = system.Control(self.ctrlMixingMatrix, self.size)
 
+
     def log(self,message=""):
         timestamp = r'\d{2}/\d{2}/\d{4} [0-2][0-9]:[0-5][0-9]:[0-5][0-9]'
         regex = re.compile(timestamp)
@@ -424,7 +424,6 @@ class ExperimentRunner():
     def run_reconstruction(self):
         t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         recon_time_start = time.time()
-
         self.eta2 = np.ones(self.M * self.N) * self.eta2_magnitude
         self.reconstruction_options = {'eta2':self.eta2,
                                        'sigmaU2':[1.]*self.M,
