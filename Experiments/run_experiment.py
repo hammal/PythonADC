@@ -1,5 +1,6 @@
 #!/home/olafurt/miniconda3/bin/python
 
+
 ###############################
 #      Standard Packages      #
 ###############################
@@ -18,6 +19,7 @@ import io
 
 import boto3
 import uuid
+
 
 ###############################
 #         ADC Packages        #
@@ -171,7 +173,11 @@ class ExperimentRunner():
                                                  steeringVector=self.vector))
         self.input_signals = tuple(self.input_signals)
 
+<<<<<<< HEAD
         #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
+=======
+        print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
+>>>>>>> Experiment runner and helper files
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(self.A, self.c)
