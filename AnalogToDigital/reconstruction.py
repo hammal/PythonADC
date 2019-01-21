@@ -172,6 +172,9 @@ class WienerFilter(object):
         - inputs an iterable of inputs to be estimatedself.
         - options
         """
+        self.logstr = ""
+        self.log("Reconstruction started!")
+
         self.Ts = t[1] - t[0]
         self.system = system
         self.inputs = inputs
@@ -238,6 +241,13 @@ class WienerFilter(object):
         # print(Vf - np.dot(self.Af, np.dot(Vf, self.Af.transpose())))
 
         self.w = np.linalg.solve(Vf + Vb, B)
+
+
+
+
+    def log(self,message=""):
+        tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)
+        self.logstr += tmp
 
 
     def __str__(self):
@@ -312,7 +322,7 @@ class WienerFilter(object):
             mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
             # print(mb[:, index] - mf[:, index])
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
-        return u
+        return u, self.logstr
 
 
 class ParallelWienerFilter(WienerFilter):
