@@ -9,6 +9,7 @@ from AnalogToDigital.system import Noise
 # import copy
 from scipy.integrate import odeint
 import scipy.optimize
+import time
 CHAIN_system = True
 
 def bruteForceCare(A, B, Q, R):
@@ -170,6 +171,9 @@ class WienerFilter(object):
         - inputs an iterable of inputs to be estimatedself.
         - options
         """
+        self.logstr = ""
+        self.log("Reconstruction started!")
+
         self.Ts = t[1] - t[0]
         self.system = system
         self.inputs = inputs
@@ -237,6 +241,13 @@ class WienerFilter(object):
         # print(Vf - np.dot(self.Af, np.dot(Vf, self.Af.transpose())))
 
         self.w = np.linalg.solve(Vf + Vb, B)
+
+
+
+
+    def log(self,message=""):
+        tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)
+        self.logstr += tmp
 
 
     def __str__(self):
@@ -310,7 +321,7 @@ class WienerFilter(object):
         for index in range(control.size - 2, 1, -1):
             mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
-        return u
+        return u, self.logstr
 
 
 class ParallelWienerFilter(WienerFilter):
