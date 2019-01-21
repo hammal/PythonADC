@@ -1,0 +1,25 @@
+universe    = vanilla
+getenv      = True      # MATLAB needs local environment
+
+my_prefix   = parallelADCExperiments
+
+#
+# Seek max floating point performance
+#
+Rank        = Kflops
+
+#
+# For MATLAB and other SEPP packages, the executable must be a script wrapper.
+#
+executable  = run_experiment.py
+
+#
+# To redirect stdout and/or stderr to /dev/null, comment these out.
+#
+log         = $(my_prefix).log
+output      = $(my_prefix).$(Process).out
+error       = $(my_prefix).$(Process).err
+
+#
+# Lastly, tell condor how many jobs to queue up.
+#
