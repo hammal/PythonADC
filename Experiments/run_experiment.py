@@ -1,3 +1,5 @@
+#!/home/olafurt/miniconda3/bin/python
+
 ###############################
 #      Standard Packages      #
 ###############################
@@ -14,7 +16,7 @@ import os
 import re
 import shutil
 import warnings
-from ruamel.yaml import YAML
+
 
 
 ###############################
@@ -53,7 +55,7 @@ class ExperimentRunner():
                  sigma2_reconst=1e-6,
                  num_periods_in_simulation=5):
 
-        print("Initializing Experiment")
+        #print("Initializing Experiment")
         self.experiment_id = experiment_id
         self.data_dir = Path(data_dir)
         self.M = M
@@ -67,15 +69,19 @@ class ExperimentRunner():
         self.primary_signal_dimension = primary_signal_dimension
         self.systemtype = systemtype
         self.OSR = OSR
-        self.eta2_magnitude = eta2_magnitude
+        #self.eta2_magnitude = eta2_magnitude
         self.kappa = kappa
         self.sigma2_thermal = sigma2_thermal
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
+        
+        self.eta2_magnitude = ((beta * sampling_period * 2*OSR)/ (2*np.pi))**(2*N) * (M**(N-2))
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
-
+        self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
+        self.finished_simulation = False
+        self.finished_reconstruction = False
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True)
 
@@ -111,8 +117,6 @@ class ExperimentRunner():
             raise NotImplemented
 
 
-
-
         # Define input signals:
         self.input_signals = []
         self.input_frequencies = np.zeros(M)
@@ -133,7 +137,7 @@ class ExperimentRunner():
                                                  steeringVector=self.vector))
         self.input_signals = tuple(self.input_signals)
 
-        print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
+        #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(self.A, self.c)
@@ -155,28 +159,6 @@ class ExperimentRunner():
     def saveLog(self):
         with (self.data_dir / 'messages.log').open(mode='w') as outfile:
             outfile.write(self.logstr)
-
-
-    def unitTest(self):
-        for key in self.__dict__.keys():
-            print("{} = {}".format(key, self.__dict__[key]))
-
-        print("\n\n")
-        self.log("This message should have a timestamp")
-        self.log("00/00/0000 00:00:00: This message should not have a timestamp")
-        print(self.logstr)
-
-        self.size = round(1./self.sampling_period)
-        self.t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)
-        self.data_dir = Path('./unit_test_{}'.format(time.strftime("%d.%m.%Y %H%M%S")))
-        if not self.data_dir.exists():
-            self.data_dir.mkdir(parents=True)
-
-        self.run_simulation()
-        self.run_reconstruction()
-
-        # with open(os.path.join(self.data_dir, 'messages.log'), 'w') as outfile:
-        #     outfile.write(self.logstr)
 
 
     def saveSimulation(self):
@@ -210,16 +192,16 @@ class ExperimentRunner():
         self.log("Input Estimates saved at \"{}\"".format(input_estimates_file_path))
 
 
-    def saveSettings(self):
-        settings_file_path = self.data_dir / 'settings.pkl'
-        with settings_file_path.open(mode='wb') as outfile:
+    def saveAll(self):
+        file_path = self.data_dir / 'ExperimentRunner.pkl'
+        with file_path.open(mode='wb') as outfile:
             pkl.dump(self.__dict__, outfile)
-        self.log("Experiment settings saved at \"{}\"".format(settings_file_path))
+        self.log("ExperimentRunner saved at \"{}\"".format(file_path))
+        self.saveLog()
 
 
     def run_simulation(self):
         self.sim_start_time = time.time()
-        self.saveInputSignals()
 
         self.simulation_options = {'stateBound':(self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.L))),
                                    'stateBoundInputs': (self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.L))),
@@ -232,8 +214,7 @@ class ExperimentRunner():
         self.sim_run_time = time.time() - self.sim_start_time
         self.log(sim_log)
         self.log("Simulation run time: {:.2f} seconds".format(self.sim_run_time))
-
-        self.saveSimulation()
+        self.finished_simulation = True
 
 
     def run_reconstruction(self):
@@ -250,9 +231,26 @@ class ExperimentRunner():
         self.recon_run_time = time.time() - self.recon_time_start
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
+        self.finished_reconstruction = True
 
-        self.saveInputEstimates()
-        self.saveSettings()
+    
+    def unitTest(self):
+        #for key in self.__dict__.keys():
+        #   print("{} = {}".format(key, self.__dict__[key]))
+
+        #print("\n\n")
+        self.log("This message should have a timestamp")
+        self.log("00/00/0000 00:00:00: This message should not have a timestamp")
+        #print(self.logstr)
+
+        self.size = round(1./self.sampling_period)
+        self.t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)
+        self.data_dir = self.data_dir.parent / ('unitTest_' + self.data_dir.name)
+        if not self.data_dir.exists():
+            self.data_dir.mkdir(parents=True)
+
+        self.run_simulation()
+        self.run_reconstruction()
 
 
 def main(experiment_id,
@@ -293,10 +291,12 @@ def main(experiment_id,
                               sigma2_reconst,
                               num_periods_in_simulation)
 
-    # runner.unitTest()
+    #runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
-    runner.saveLog()
+    runner.saveAll()
+    #runner.log("{}".format(runner.eta2_magnitude))
+    #runner.saveLog()
 
 
 if __name__ == "__main__":
