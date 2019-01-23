@@ -110,13 +110,14 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
+        
+        self.eta2_magnitude = ((beta * sampling_period * 2*OSR)/ (2*np.pi))**(2*N) * (M**(N-2))
 
         self.border = np.int(self.size //100)
         self.all_input_signal_amplitudes = np.zeros(L)
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
-
         self.finished_simulation = False
         self.finished_reconstruction = False
         if not self.data_dir.exists():
@@ -205,7 +206,6 @@ class ExperimentRunner():
             mixingPi = np.zeros((self.N, self.M, self.M))
             H = hadamardMatrix(self.M)
             
-
             self.all_input_signal_frequencies = np.zeros(L)
             self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
             self.all_input_signal_amplitudes[self.primary_signal_dimension] = self.input_amplitude
@@ -243,7 +243,6 @@ class ExperimentRunner():
 
         else:
             raise NotImplemented
-
 
         # Define input signals:
         self.input_signals = []
@@ -441,7 +440,6 @@ class ExperimentRunner():
     def unitTest(self):
         #for key in self.__dict__.keys():
         #   print("{} = {}".format(key, self.__dict__[key]))
-
         #print("\n\n")
         self.log("This message should have a timestamp")
         self.log("00/00/0000 00:00:00: This message should not have a timestamp")
@@ -522,7 +520,7 @@ def main(experiment_id,
                               sigma2_reconst,
                               num_periods_in_simulation)
 
-    # runner.unitTest()
+    #runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
 
