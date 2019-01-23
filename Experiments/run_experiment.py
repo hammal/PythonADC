@@ -173,11 +173,9 @@ class ExperimentRunner():
                                                  steeringVector=self.vector))
         self.input_signals = tuple(self.input_signals)
 
-<<<<<<< HEAD
+
+
         #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
-=======
-        print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
->>>>>>> Experiment runner and helper files
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(self.A, self.c)
@@ -273,7 +271,6 @@ class ExperimentRunner():
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
         self.finished_reconstruction = True
-
     
     def unitTest(self):
         #for key in self.__dict__.keys():
@@ -345,7 +342,7 @@ def main(experiment_id,
                               sigma2_reconst,
                               num_periods_in_simulation)
 
-    # runner.unitTest()
+    #runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
 
