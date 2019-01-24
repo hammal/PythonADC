@@ -113,7 +113,7 @@ class ExperimentRunner():
 
         self.reconstruction_border = self.size // 20
         
-        self.eta2_magnitude = ((beta * sampling_period * 2*OSR)/ (2*np.pi))**(2*N) * (M**(N-2))
+        self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
         self.border = np.int(self.size //100)
         self.all_input_signal_amplitudes = np.zeros(L)
