@@ -20,7 +20,6 @@ import io
 import boto3
 import uuid
 
-
 ###############################
 #         ADC Packages        #
 ###############################
@@ -109,6 +108,8 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
+
+        self.reconstruction_border = self.size // 20
         
         self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
@@ -304,6 +305,7 @@ class ExperimentRunner():
                 'oob_rate': self.results['num_oob'] / self.size}
 
 
+
 def main(experiment_id,
          data_dir,
          M, 
@@ -342,7 +344,7 @@ def main(experiment_id,
                               sigma2_reconst,
                               num_periods_in_simulation)
 
-    #runner.unitTest()
+    # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
 
