@@ -8,7 +8,7 @@ class SNRvsAmplitude(object):
     This is a helper class for plotting SNR vs input power
     """
 
-    def __init__(self, system, estimates, OSR=32, gamma = 1., bound = 1.):
+    def __init__(self, system, estimates, OSR=32, gamma = 1., bound = 1., fmax = None):
         self.gamma = gamma
         self.bound = bound
         self.estimates = []
@@ -19,7 +19,7 @@ class SNRvsAmplitude(object):
             self.estimates.append(
                 {
                     "estimates": est,
-                    "performance": SigmaDeltaPerformance(system, est, osr=OSR),
+                    "performance": SigmaDeltaPerformance(system, est, osr=OSR, fmax=fmax),
                     "inputPower": np.var(est.flatten()) / (self.bound ** 2 / 2.)
                 }
             )
@@ -87,7 +87,7 @@ class SigmaDeltaPerformance(object):
     - IPn (Interception point n, for n = 1,...,N
     """
 
-    def __init__(self, system, estimate, fs = 1., osr = 32, fullScaleAmplitude = 1., eta2 = 1.):
+    def __init__(self, system, estimate, fs = 1., osr = 32, fullScaleAmplitude = 1., eta2 = 1., fmax=None):
         self.eta2 = eta2
         self.OSR = osr
         self.system = system
@@ -97,7 +97,14 @@ class SigmaDeltaPerformance(object):
         self.estimate -= np.mean(self.estimate)
         self.freq, self.spec = self.powerSpectralDensity()
         self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq, self.spec)
-        self.fIndex = self.findMax(self.spec)
+        if not fmax:
+            self.fIndex = self.findMax(self.spec)
+        else:
+            if fmax > fs / (2. * osr):
+                raise "fmax not in signal bandwith"
+            self.fIndex = np.int(fmax/fs * 2 * self.spec.size)
+            # print("fIndex given at %i of %i" % (self.fIndex, self.spec.size))
+
         self.f = self.fIndex * self.fs / (2. * self.N)
         # print("f: %s" % self.f)
         self.harmonics, self.harmonicDistortion = self.computeHarmonics()
@@ -305,7 +312,7 @@ class SigmaDeltaPerformance(object):
         """
         Compute Power-spectral density
         """
-        self.N = min([256 * 1 * self.OSR, self.estimate.shape[0]])
+        self.N = min([256 * 2 * self.OSR, self.estimate.shape[0]])
         window = 'hanning'
 
         wind = np.hanning(self.N)
