@@ -110,6 +110,8 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
+
+        self.reconstruction_border = self.size // 20
         
         self.eta2_magnitude = ((beta * sampling_period * 2*OSR)/ (2*np.pi))**(2*N) * (M**(N-2))
 
@@ -520,7 +522,7 @@ def main(experiment_id,
                               sigma2_reconst,
                               num_periods_in_simulation)
 
-    #runner.unitTest()
+    # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
 
