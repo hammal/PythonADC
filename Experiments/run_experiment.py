@@ -14,10 +14,10 @@ from pathlib import Path
 import time
 import os
 import re
-import shutil
-import warnings
+import io
 
-
+import boto3
+import uuid
 
 ###############################
 #         ADC Packages        #
@@ -27,9 +27,26 @@ import AnalogToDigital.simulator as simulator
 import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 
+BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
+
 
 def hadamardMatrix(n):
     return sp.linalg.hadamard(n)/np.sqrt(n)
+
+
+def create_s3_filename(file_name):
+    return ''.join([str(uuid.uuid4().hex[:6]), file_name])
+
+
+def uploadTos3(s3_connection, bucket_name, file_name, obj):
+    pickle_buffer = io.BytesIO()
+    pkl.dump(obj, pickle_buffer)
+
+    s3_filename = create_s3_filename(file_name)
+    (s3_connection
+      .Object(bucket_name, s3_filename)
+      .put(Body=pickle_buffer.getvalue()))
+    return s3_filename
 
 
 class ExperimentRunner():
@@ -53,7 +70,7 @@ class ExperimentRunner():
                  kappa=1,
                  sigma2_thermal=1e-6,
                  sigma2_reconst=1e-6,
-                 num_periods_in_simulation=5):
+                 num_periods_in_simulation=100):
 
         #print("Initializing Experiment")
         self.experiment_id = experiment_id
@@ -75,6 +92,8 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
+
+        self.reconstruction_border = self.size // 20
         
         self.eta2_magnitude = ((beta * sampling_period * 2*OSR)/ (2*np.pi))**(2*N) * (M**(N-2))
 
@@ -243,14 +262,14 @@ class ExperimentRunner():
         self.log("00/00/0000 00:00:00: This message should not have a timestamp")
         #print(self.logstr)
 
-        self.size = round(1./self.sampling_period)
+        self.size = 5000#round(1./self.sampling_period)
         self.t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)
         self.data_dir = self.data_dir.parent / ('unitTest_' + self.data_dir.name)
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True)
 
         self.run_simulation()
-        self.run_reconstruction()
+        # self.run_reconstruction()
 
 
 def main(experiment_id,
@@ -291,12 +310,23 @@ def main(experiment_id,
                               sigma2_reconst,
                               num_periods_in_simulation)
 
-    #runner.unitTest()
+    # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
-    runner.saveAll()
-    #runner.log("{}".format(runner.eta2_magnitude))
-    #runner.saveLog()
+    # runner.saveAll()
+
+    s3_resource = boto3.resource('s3')
+
+    bucket = s3_resource.Bucket(BUCKET_NAME)
+    bucket.upload_file(Filename='condor_prefix',Key='condor_prefix')
+    s3_file_name = uploadTos3(
+      s3_connection=s3_resource,
+      bucket_name=BUCKET_NAME,
+      file_name=experiment_id,
+      obj=runner)
+    runner.log("runner object saved to S3")
+    runner.log("S3 file name: \"{}\"".format(s3_file_name))
+    runner.saveLog()
 
 
 if __name__ == "__main__":
