@@ -95,7 +95,7 @@ class ExperimentRunner():
 
         self.reconstruction_border = self.size // 20
         
-        self.eta2_magnitude = ((beta * sampling_period * 2*OSR)/ (2*np.pi))**(2*N) * (M**(N-2))
+        self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
         self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
@@ -109,9 +109,9 @@ class ExperimentRunner():
             self.primary_signal_dimension = 0
 
 
-        if self.input_frequency != 1./(self.sampling_period * self.OSR):
-            self.log("Setting f_sig = f_s/OSR")
-            self.input_frequency = 1./(self.sampling_period * self.OSR)
+        if self.input_frequency != 1./(self.sampling_period * 2 * self.OSR):
+            self.log("Setting f_sig = f_s/(2*OSR)")
+            self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
 
 
         if self.systemtype == "ParallelIntegratorChain":
@@ -318,7 +318,7 @@ def main(experiment_id,
     s3_resource = boto3.resource('s3')
 
     bucket = s3_resource.Bucket(BUCKET_NAME)
-    bucket.upload_file(Filename='condor_prefix',Key='condor_prefix')
+    # bucket.upload_file(Filename='condor_prefix',Key='condor_prefix')
     s3_file_name = uploadTos3(
       s3_connection=s3_resource,
       bucket_name=BUCKET_NAME,
