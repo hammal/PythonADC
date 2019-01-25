@@ -38,16 +38,31 @@ def create_s3_filename(file_name):
     return ''.join([str(uuid.uuid4().hex[:6]), file_name])
 
 
+def writeCSVDataFrameToS3(s3_connection, bucket_name, file_name, df):
+    csv_buffer = io.StringIO()
+    df.to_csv(csv_buffer, index=False)
+    (s3_connection
+      .Object(bucket_name, file_name)
+      .put(Body=csv_buffer.getvalue()))
+    string_buffer.close()
+
+
+def writeStringToS3(s3_connection, bucket_name, file_name, string):
+    string_buffer = io.StringIO()
+    string_buffer.write(string)
+    (s3_connection
+      .Object(bucket_name, file_name)
+      .put(Body=string_buffer.getvalue()))
+    string_buffer.close()
+
+
 def uploadTos3(s3_connection, bucket_name, file_name, obj):
     pickle_buffer = io.BytesIO()
     pkl.dump(obj, pickle_buffer)
-
-    s3_filename = create_s3_filename(file_name)
     (s3_connection
-      .Object(bucket_name, s3_filename)
+      .Object(bucket_name, file_name)
       .put(Body=pickle_buffer.getvalue()))
     pickle_buffer.close()
-    return s3_filename
 
 
 class ExperimentRunner():
@@ -87,16 +102,15 @@ class ExperimentRunner():
         self.primary_signal_dimension = primary_signal_dimension
         self.systemtype = systemtype
         self.OSR = OSR
-        #self.eta2_magnitude = eta2_magnitude
         self.kappa = kappa
         self.sigma2_thermal = sigma2_thermal
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
-
-        self.reconstruction_border = self.size // 20
         
         self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
+
+        self.border = np.int(self.size //100)
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
         self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
@@ -177,7 +191,7 @@ class ExperimentRunner():
 
 
     def saveLog(self):
-        with (self.data_dir / 'messages.log').open(mode='w') as outfile:
+        with (self.data_dir / f'{self.experiment_id}.log').open(mode='w') as outfile:
             outfile.write(self.logstr)
 
 
@@ -246,8 +260,9 @@ class ExperimentRunner():
                                        'noise':[{'std':self.sigma2_reconst,
                                                  'steeringVector': self.beta*np.eye(self.N * self.M)[:,i], 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]}
         self.reconstruction = reconstruction.WienerFilter(self.t, self.sys, self.input_signals, self.reconstruction_options)
-        self.input_estimates, recon_log = self.reconstruction.filter(self.ctrl)
+        tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
 
+        self.input_estimates = tmp_estimates[border:-border]
         self.recon_run_time = time.time() - self.recon_time_start
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
@@ -271,6 +286,16 @@ class ExperimentRunner():
 
         self.run_simulation()
         # self.run_reconstruction()
+
+    def getParams(self):
+        return {'M':self.M,
+                'N':self.N,
+                'L':self.L,
+                'beta':self.beta,
+                'sampling_period':self.sampling_period,
+                'input_frequency':self.input_frequency,
+                'eta2':self.eta2_magnitude,
+                'disturbance_frequencies':self.disturbance_frequencies}
 
 
 def main(experiment_id,
@@ -314,21 +339,30 @@ def main(experiment_id,
     # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
-    # runner.saveAll()
 
     s3_resource = boto3.resource('s3')
+    s3_file_name_prefix = uuid.uuid4().hex[:6]
 
-    bucket = s3_resource.Bucket(BUCKET_NAME)
-    # bucket.upload_file(Filename='condor_prefix',Key='condor_prefix')
-    s3_file_name = uploadTos3(
+    runner.log("Saving results to S3")
+    runner.log("S3 file name: \"{}\"".format(''.join([s3_file_name_prefix, experiment_id])))
+
+    uploadTos3(
       s3_connection=s3_resource,
       bucket_name=BUCKET_NAME,
-      file_name=experiment_id,
+      file_name=''.join([s3_file_name_prefix,experiment_id,'_results.pkl']),
       obj=runner)
-    runner.log("runner object saved to S3")
-    runner.log("S3 file name: \"{}\"".format(s3_file_name))
-    runner.saveLog()
 
+    writeStringToS3(
+      s3_connection=s3_resource,
+      bucket_name=BUCKET_NAME,
+      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
+      string=runner.logstr)
+
+    writeCSVDataFrameToS3(
+      s3_connection=s3_resource,
+      bucket_name=BUCKET_NAME,
+      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
+      df=pd.DataFrame(runner.getParams()))
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Parallel ADC\
