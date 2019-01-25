@@ -109,14 +109,13 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
-
-        self.reconstruction_border = self.size // 20
         
         self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
         self.border = np.int(self.size //100)
         self.all_input_signal_amplitudes = np.zeros(L)
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
+
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
         self.finished_simulation = False
@@ -481,6 +480,16 @@ class ExperimentRunner():
                   'sigma2_reconst': self.sigma2_reconst}
         return {**params, **input_steering_vectors}
 
+    def getParams(self):
+        return {'M':self.M,
+                'N':self.N,
+                'L':self.L,
+                'beta':self.beta,
+                'sampling_period':self.sampling_period,
+                'input_frequency':self.input_frequency,
+                'eta2':self.eta2_magnitude,
+                'disturbance_frequencies':self.disturbance_frequencies}
+
 
 def main(experiment_id,
          data_dir,
@@ -559,6 +568,17 @@ def main(experiment_id,
     #   file_name=''.join([s3_file_name_prefix,experiment_id,'.params.pkl']),
     #   obj=params)
 
+    writeStringToS3(
+      s3_connection=s3_resource,
+      bucket_name=BUCKET_NAME,
+      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
+      string=runner.logstr)
+
+    writeCSVDataFrameToS3(
+      s3_connection=s3_resource,
+      bucket_name=BUCKET_NAME,
+      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
+      df=pd.DataFrame(runner.getParams()))
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Parallel ADC\
