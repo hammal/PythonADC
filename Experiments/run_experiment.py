@@ -46,6 +46,7 @@ def uploadTos3(s3_connection, bucket_name, file_name, obj):
     (s3_connection
       .Object(bucket_name, s3_filename)
       .put(Body=pickle_buffer.getvalue()))
+    pickle_buffer.close()
     return s3_filename
 
 
@@ -140,11 +141,11 @@ class ExperimentRunner():
         self.input_signals = []
         self.input_frequencies = np.zeros(M)
         self.input_frequencies[self.primary_signal_dimension] = self.input_frequency
-
+        allowed_disturbance_signal_frequencies = self.input_frequency * (0.5**np.arange(2,M+1))
         for i in range(self.M):
             if i == self.primary_signal_dimension: continue
-            k = np.random.randint(1,M+1)
-            self.input_frequencies[i] = self.input_frequency/k
+            k = np.random.randint(0,M-1)
+            self.input_frequencies[i] = allowed_disturbance_signal_frequencies[k]
 
         for i in range(self.M):
             self.vector = np.zeros(self.M*self.N)
