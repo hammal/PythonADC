@@ -67,7 +67,6 @@ def uploadTos3(s3_connection, bucket_name, file_name, obj):
     pickle_buffer.close()
 
 
-
 class ExperimentRunner():
     """ Class to handle running experiments"""
 
