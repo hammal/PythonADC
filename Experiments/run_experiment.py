@@ -392,7 +392,7 @@ if __name__ == "__main__":
 
     # Optional arguments, things that could change later
     # or are currently set to some fixed value
-    arg_parser.add_argument("-f_sig", "--input_frequency", type=float default=None)
+    arg_parser.add_argument("-f_sig", "--input_frequency", type=float, default=None)
     arg_parser.add_argument("-eta2", "--eta2_magnitude", type=float, default=1)
     arg_parser.add_argument("-kappa", type=float, default=1)
     arg_parser.add_argument("-OSR", type=int, default=16)
