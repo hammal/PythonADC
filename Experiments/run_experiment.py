@@ -488,7 +488,10 @@ class ExperimentRunner():
                 'sampling_period':self.sampling_period,
                 'input_frequency':self.input_frequency,
                 'eta2':self.eta2_magnitude,
-                'disturbance_frequencies':self.disturbance_frequencies}
+                'disturbance_frequencies':self.input_frequencies[1:],
+                'size': "{:e}".format(self.size),
+                'num_oob': self.result['num_oob'],
+                'oob_rate': self.results['num_oob'] / self.size}
 
 
 def main(experiment_id,
@@ -568,17 +571,7 @@ def main(experiment_id,
     #   file_name=''.join([s3_file_name_prefix,experiment_id,'.params.pkl']),
     #   obj=params)
 
-    writeStringToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
-      string=runner.logstr)
 
-    writeCSVDataFrameToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      df=pd.DataFrame(runner.getParams()))
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Parallel ADC\
