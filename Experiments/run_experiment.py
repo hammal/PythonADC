@@ -491,7 +491,7 @@ class ExperimentRunner():
                 'disturbance_frequencies':self.input_frequencies[1:],
                 'size': "{:e}".format(self.size),
                 'num_oob': self.result['num_oob'],
-                'oob_rate': self.results['num_oob'] / self.size}
+                'oob_rate': self.result['num_oob'] / self.size}
 
 
 def main(experiment_id,
