@@ -582,7 +582,8 @@ def main(experiment_id,
       s3_connection=s3_resource,
       bucket_name=BUCKET_NAME,
       file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      df=pd.DataFrame(runner.getParams()))
+      string=params_string)
+
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Parallel ADC\
