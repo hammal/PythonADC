@@ -120,7 +120,7 @@ def piBlockSystem1():
                'noise':[{'std': 1e-6    , 'steeringVector': beta*np.eye((N+1)*M)[:,i], 'name':'Bastard'} for i in range((N+1)*M)]}
 
     recon = reconstruction.WienerFilter(t, sys, input_signals, options)
-    input_estimates = recon.filter(ctrl)
+    input_estimates, recon_log = recon.filter(ctrl)
 
 
     print("Run Time: {} seconds".format(time.time()-start_time))
@@ -215,7 +215,7 @@ def piBlockSystem2():
                'noise':[{'std': 1e-4, 'steeringVector': np.ones((N+1)*M), 'name':'Bastard'}]}
 
     recon = reconstruction.WienerFilter(t, sys, input_signals, options)
-    input_estimates = recon.filter(ctrl)
+    input_estimates, recon_log = recon.filter(ctrl)
 
 
     print("Run Time: {} seconds".format(time.time()-start_time))

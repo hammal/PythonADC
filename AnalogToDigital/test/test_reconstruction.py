@@ -32,7 +32,7 @@ def test_for_constant_signal():
 
     recon = reconstruction.WienerFilter(t, sys, (inp,))
 
-    u_hat = recon.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
 
     plt.figure()
     plt.plot(t, coef, label="u")
@@ -103,7 +103,7 @@ def test_for_first_order_filter_signal():
     recon = reconstruction.WienerFilter(t, sys, (inp,))
     reconP = reconstruction.ParallelWienerFilter(t, sys, (inp,))
 
-    u_hat = recon.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
     u_hatP = reconP.filter(ctrl)
 
     plt.figure()
@@ -144,7 +144,7 @@ def test_for_sinusodial_signal():
 
     recon = reconstruction.WienerFilter(t, sys, (inp,))
 
-    u_hat = recon.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
 
     plt.figure()
     plt.plot(t, inp.scalarFunction(t), label="u")
@@ -182,7 +182,8 @@ def test_lowering_order():
     for index in range(1, order + 1):
         newSystem, newControl, newInput = system.LowerOrderSystem(sys, ctrl, inp, index)
         recon = reconstruction.WienerFilter(t, newSystem, (newInput,))
-        u_hats.append(recon.filter(newControl))
+        u_hat, log = recon.filter(newControl)
+        u_hats.append(u_hat)
 
     plt.figure()
     plt.plot(t, inp.scalarFunction(t), label="u")
@@ -233,7 +234,7 @@ def test_postFiltering():
 
     recon = reconstruction.WienerFilterWithPostFiltering(t, sys, (inp,), postFilter)
 
-    u_hat = recon.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
 
     plt.figure()
     plt.plot(t, inp.scalarFunction(t), label="u")
@@ -291,8 +292,8 @@ def test_for_noise_simulation():
     recon_with_noise = reconstruction.WienerFilter(t, sys, [inp], options=options)
     recon_with_noise_Parallel = reconstruction.ParallelWienerFilter(t, sys, [inp], options=options)
 
-    u_hat = recon.filter(ctrl)
-    u_hat_with_noise = recon_with_noise.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
+    u_hat_with_noise, log_with_noise = recon_with_noise.filter(ctrl)
     u_hat_with_noise_Parallel = recon_with_noise_Parallel.filter(ctrl)
 
 
