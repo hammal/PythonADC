@@ -103,7 +103,7 @@ class SigmaDeltaPerformance(object):
             if fmax > fs / (2. * osr):
                 raise "fmax not in signal bandwith"
             self.fIndex = np.int(fmax/fs * 2 * self.spec.size)
-            print("fIndex given at %i of %i" % (self.fIndex, self.spec.size))
+            # print("fIndex given at %i of %i" % (self.fIndex, self.spec.size))
 
         self.f = self.fIndex * self.fs / (2. * self.N)
         # print("f: %s" % self.f)
