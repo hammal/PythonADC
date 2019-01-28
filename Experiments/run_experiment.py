@@ -76,7 +76,7 @@ class ExperimentRunner():
                  L,
                  input_phase,
                  input_amplitude,
-                 input_frequency=1,
+                 input_frequency=None,
                  beta=6250,
                  sampling_period=8e-5,
                  primary_signal_dimension=0,
@@ -124,7 +124,7 @@ class ExperimentRunner():
             self.primary_signal_dimension = 0
 
 
-        if self.input_frequency != 1./(self.sampling_period * 2 * self.OSR):
+        if self.input_frequency == None:
             self.log("Setting f_sig = f_s/(2*OSR)")
             self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
 
@@ -243,10 +243,10 @@ class ExperimentRunner():
                                    'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]}
         
         self.sim = simulator.Simulator(self.sys, self.ctrl, options=self.simulation_options)
-        self.result, sim_log = self.sim.simulate(self.t, self.input_signals)
+        self.result = self.sim.simulate(self.t, self.input_signals)
 
         self.sim_run_time = time.time() - self.sim_start_time
-        self.log(sim_log)
+        self.log(self.result['log'])
         self.log("Simulation run time: {:.2f} seconds".format(self.sim_run_time))
         self.finished_simulation = True
 
@@ -262,7 +262,7 @@ class ExperimentRunner():
         self.reconstruction = reconstruction.WienerFilter(self.t, self.sys, self.input_signals, self.reconstruction_options)
         tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
 
-        self.input_estimates = tmp_estimates[border:-border]
+        self.input_estimates = tmp_estimates[self.border:-self.border]
         self.recon_run_time = time.time() - self.recon_time_start
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
@@ -295,7 +295,10 @@ class ExperimentRunner():
                 'sampling_period':self.sampling_period,
                 'input_frequency':self.input_frequency,
                 'eta2':self.eta2_magnitude,
-                'disturbance_frequencies':self.disturbance_frequencies}
+                'disturbance_frequencies':self.input_frequencies[1:],
+                'size': "{:e}".format(self.size),
+                'num_oob': self.result['num_oob'],
+                'oob_rate': self.results['num_oob'] / self.size}
 
 
 def main(experiment_id,
@@ -305,7 +308,7 @@ def main(experiment_id,
          L,
          input_phase,
          input_amplitude,
-         input_frequency=1,
+         input_frequency=None,
          beta=6250,
          sampling_period=8e-5,
          primary_signal_dimension=1,
@@ -345,6 +348,10 @@ def main(experiment_id,
 
     runner.log("Saving results to S3")
     runner.log("S3 file name: \"{}\"".format(''.join([s3_file_name_prefix, experiment_id])))
+    params = runner.getParams()
+    params_string = ''
+    for key in params.keys():
+      params_string = ''.join([params_string, f'{key}: {params[key]}\n'])
 
     uploadTos3(
       s3_connection=s3_resource,
@@ -358,11 +365,12 @@ def main(experiment_id,
       file_name=f'{s3_file_name_prefix}{experiment_id}.log',
       string=runner.logstr)
 
-    writeCSVDataFrameToS3(
+    writeStringToS3(
       s3_connection=s3_resource,
       bucket_name=BUCKET_NAME,
       file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      df=pd.DataFrame(runner.getParams()))
+      string=params_string)
+
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Parallel ADC\
@@ -375,7 +383,6 @@ if __name__ == "__main__":
     arg_parser.add_argument("-N", required=True, type=int)
     arg_parser.add_argument("-L", required=True, type=int)
     arg_parser.add_argument("-beta", required=True, type=int)
-    arg_parser.add_argument("-f_sig", "--input_frequency", required=True, type=float)
     arg_parser.add_argument("-Ts", "--sampling_period", required=True, type=float)
     arg_parser.add_argument("-Ax", "--input_amplitude", required=True,  type=float)
     arg_parser.add_argument("-phi", "--input_phase", required=True, type=float)
@@ -384,6 +391,8 @@ if __name__ == "__main__":
 
 
     # Optional arguments, things that could change later
+    # or are currently set to some fixed value
+    arg_parser.add_argument("-f_sig", "--input_frequency", default=None)
     arg_parser.add_argument("-eta2", "--eta2_magnitude", type=float, default=1)
     arg_parser.add_argument("-kappa", type=float, default=1)
     arg_parser.add_argument("-OSR", type=int, default=16)
