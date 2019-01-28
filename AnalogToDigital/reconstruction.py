@@ -232,7 +232,6 @@ class WienerFilter(object):
         B = np.zeros((self.order, len(inputs)), dtype=np.float64)
         for index, input in enumerate(inputs):
             B[:, index] = input.steeringVector
-
         # print("V_f - Af Vf Af")
         # print(Vf - np.dot(self.Af, np.dot(Vf, self.Af.transpose())))
 
@@ -263,7 +262,6 @@ class WienerFilter(object):
                 self.Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
                 # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
                 self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
-            
             # Compute Offsets
             if self.ForwardOffsetMatrix.shape[1] == 1:
                 self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
@@ -298,17 +296,19 @@ class WienerFilter(object):
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float64)
         mf = np.zeros((self.order, control.size), dtype=np.float64)
         mb = np.zeros_like(mf)
-
         # If not initial state use the control sequence and assume at rails 1 V 
         if initialState:
             mf[:,0] = initialState
         else:
             mf[:,0] = np.array(control[0])
 
+        print(control.size)
         for index in range(1, control.size):
             mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1]) + self.Of
+            # print(mf[:, index])
         for index in range(control.size - 2, 1, -1):
             mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
+            # print(mb[:, index] - mf[:, index])
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
         return u
 
