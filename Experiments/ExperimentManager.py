@@ -994,16 +994,7 @@ if __name__ == "__main__":
     
     # plt.grid()
     # plt.legend()
-<<<<<<< HEAD
-    # plt.show()
-=======
 
-    # plt.show()
-
-
-
-
->>>>>>> moving forward
     # multipleInputExperiment()
     # randomWalkPlusSinusoid()
 
