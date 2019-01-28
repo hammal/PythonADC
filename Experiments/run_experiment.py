@@ -266,7 +266,6 @@ class ExperimentRunner():
         tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
 
         self.input_estimates = tmp_estimates[self.border:-self.border]
-
         self.recon_run_time = time.time() - self.recon_time_start
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
@@ -384,7 +383,8 @@ def main(experiment_id,
       s3_connection=s3_resource,
       bucket_name=BUCKET_NAME,
       file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      df=pd.DataFrame(runner.getParams()))
+      string=params_string)
+
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Parallel ADC\
