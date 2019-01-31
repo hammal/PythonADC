@@ -112,7 +112,7 @@ plt.legend()
 
 
 
-u_hat = filter.filter(control)
+u_hat, logstr = filter.filter(control)
 evaluation = ADC.Evaluation(model, u_hat, (input,), signalBand=[5., 5e2])
 
 # fig1 = evaluation.PlotTransferFunctions((1e-1, 15e3))
