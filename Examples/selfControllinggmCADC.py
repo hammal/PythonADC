@@ -47,7 +47,7 @@ filterSpec = {
 
 filter = ADC.WienerFilterAutomaticSystem(filterSpec)
 
-u_hat = filter.filter(states)
+u_hat, logstr = filter.filter(states)
 
 print(u_hat)
 

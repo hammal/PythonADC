@@ -38,7 +38,7 @@ filterSpec = {
 
 filter = ADC.WienerFilter(filterSpec)
 
-u_hat = filter.filter(controller)
+u_hat, logstr = filter.filter(controller)
 
 plt.figure()
 plt.plot(t, u)
