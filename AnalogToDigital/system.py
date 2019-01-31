@@ -113,7 +113,7 @@ class System(object):
         """
         self.A = np.array(A, dtype=np.float64)
         self.c = np.array(c, dtype=np.float64)
-        if b:
+        if np.any(b):
             self.b = b
         else:
             self.b = np.zeros(self.A.shape[0])

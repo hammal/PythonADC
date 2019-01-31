@@ -126,8 +126,8 @@ class ExperimentRunner():
 
 
         if self.input_frequency == None:
-            self.log("Setting f_sig = f_s/(2*OSR)")
             self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
+            self.log(f'Setting f_sig = f_s/(2*OSR) = {self.input_frequency}')
 
 
         if self.systemtype == "ParallelIntegratorChain":
@@ -140,14 +140,15 @@ class ExperimentRunner():
             if N > 1:
                 if L == M:
                     for k in range(N-1):
-                        mixingPi[k] = beta*(np.outer(H[:,0],H[:,0])*L)/np.sqrt(L)
+                        mixingPi[k] = beta * np.sqrt(L) * (np.outer(H[:,0],H[:,0]))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 elif L == 1:
                     for k in range(N-1):
-                        mixingPi[k] = self.beta*(sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
+                        mixingPi[k] = self.beta * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 else:
                     raise NotImplemented
+                print("A = {}".format(self.A))
         else:
             raise NotImplemented
 
@@ -163,13 +164,14 @@ class ExperimentRunner():
             self.input_frequencies[i] = allowed_disturbance_signal_frequencies[k]
 
         for i in range(self.M):
-            self.vector = np.zeros(self.M*self.N)
-            self.vector[0:self.M] = self.beta*(H[:,i])
+            vector = np.zeros(self.M*self.N)
+            vector[0:self.M] = self.beta*(H[:,i])
             self.input_signals.append(system.Sin(self.sampling_period,
                                                  amplitude=self.input_amplitude,
                                                  frequency=self.input_frequencies[i],
                                                  phase=self.input_phase,
-                                                 steeringVector=self.vector))
+                                                 steeringVector=vector))
+            print(f'b_{i} = {self.input_signals[i].steeringVector}')
         self.input_signals = tuple(self.input_signals)
 
 
@@ -177,9 +179,10 @@ class ExperimentRunner():
         #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
 
         self.c = np.eye(self.N * self.M)
-        self.sys = system.System(self.A, self.c)
+        self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[0].steeringVector)
 
-        self.ctrlMixingMatrix = - self.kappa * self.beta * np.eye(self.N * self.M)
+        self.ctrlMixingMatrix = (- self.kappa * self.beta * np.eye(self.N * self.M)
+                                 + np.random.randn(self.N * self.M, self.N * self.M) * 1e-6)
         self.ctrl = system.Control(self.ctrlMixingMatrix, self.size)
 
     
@@ -280,14 +283,15 @@ class ExperimentRunner():
         self.log("00/00/0000 00:00:00: This message should not have a timestamp")
         #print(self.logstr)
 
-        self.size = 5000#round(1./self.sampling_period)
+        self.size = round(1./self.sampling_period)
         self.t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)
-        self.data_dir = self.data_dir.parent / ('unitTest_' + self.data_dir.name)
-        if not self.data_dir.exists():
-            self.data_dir.mkdir(parents=True)
+        # self.data_dir = self.data_dir.parent / ('unitTest_' + self.data_dir.name)
+        # if not self.data_dir.exists():
+        #     self.data_dir.mkdir(parents=True)
 
         self.run_simulation()
-        # self.run_reconstruction()
+        self.run_reconstruction()
+        print(self.logstr)
 
     def getParams(self):
         return {'M':self.M,
@@ -296,11 +300,14 @@ class ExperimentRunner():
                 'beta':self.beta,
                 'sampling_period':self.sampling_period,
                 'input_frequency':self.input_frequency,
+                'input_amplitude':self.input_amplitude,
                 'eta2':self.eta2_magnitude,
                 'disturbance_frequencies':self.input_frequencies[1:],
                 'size': "{:e}".format(self.size),
                 'num_oob': self.result['num_oob'],
-                'oob_rate': self.result['num_oob'] / self.size}
+                'oob_rate': self.result['num_oob'] / self.size,
+                'sigma2_thermal': self.sigma2_thermal,
+                'sigma2_reconst': self.sigma2_reconst}
 
 
 def main(experiment_id,
@@ -373,17 +380,11 @@ def main(experiment_id,
       file_name=f'{s3_file_name_prefix}{experiment_id}.params',
       string=params_string)
 
-    writeStringToS3(
+    uploadTos3(
       s3_connection=s3_resource,
       bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
-      string=runner.logstr)
-
-    writeCSVDataFrameToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      string=params_string)
+      file_name=''.join([s3_file_name_prefix,experiment_id,'.params.pkl']),
+      obj=params)
 
 
 if __name__ == "__main__":
