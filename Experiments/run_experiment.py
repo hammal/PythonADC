@@ -111,6 +111,8 @@ class ExperimentRunner():
         self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
         self.border = np.int(self.size //100)
+        self.all_input_signal_amplitudes = np.zeros(L)
+        self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
         self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
@@ -137,11 +139,14 @@ class ExperimentRunner():
             H = hadamardMatrix(self.M)
             
             if N > 1:
-                if L == M:
+                # L=1 means just one of M dimensions is used and there is
+                # only one input signal => We scale up the input vector by sqrt(M)
+                if L == 1:
                     for k in range(N-1):
-                        mixingPi[k] = beta * np.sqrt(L) * (np.outer(H[:,0],H[:,0]))
+                        mixingPi[k] = beta * np.sqrt(M) * (np.outer(H[:,0],H[:,0]))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
-                elif L == 1:
+                # L=M means M input signals
+                elif L == M:
                     for k in range(N-1):
                         mixingPi[k] = self.beta * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
@@ -154,20 +159,21 @@ class ExperimentRunner():
 
         # Define input signals:
         self.input_signals = []
-        self.input_frequencies = np.zeros(M)
-        self.input_frequencies[self.primary_signal_dimension] = self.input_frequency
-        allowed_disturbance_signal_frequencies = self.input_frequency * (0.5**np.arange(2,M+1))
-        for i in range(self.M):
+        self.all_input_signal_frequencies = np.zeros(L)
+        self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
+        allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(2,3*M))
+        for i in range(self.L):
             if i == self.primary_signal_dimension: continue
-            k = np.random.randint(0,M-1)
-            self.input_frequencies[i] = allowed_disturbance_signal_frequencies[k]
+            k = np.random.randint(0,L-1)
+            self.all_input_signal_frequencies[i] = allowed_signal_frequencies[k]
+            self.all_input_signal_amplitudes[i] = input_amplitude
 
-        for i in range(self.M):
+        for i in range(self.L):
             vector = np.zeros(self.M*self.N)
-            vector[0:self.M] = self.beta*(H[:,i])
+            vector[0:self.M] = (mixingPi[0][:,i]) * np.sqrt(M-L+1) # self.beta 
             self.input_signals.append(system.Sin(self.sampling_period,
-                                                 amplitude=self.input_amplitude,
-                                                 frequency=self.input_frequencies[i],
+                                                 amplitude=self.all_input_signal_amplitudes[i],
+                                                 frequency=self.all_input_signal_frequencies[i],
                                                  phase=self.input_phase,
                                                  steeringVector=vector))
             print(f'b_{i} = {self.input_signals[i].steeringVector}')
@@ -176,7 +182,7 @@ class ExperimentRunner():
         #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
 
         self.c = np.eye(self.N * self.M)
-        self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[0].steeringVector)
+        self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
 
         self.ctrlMixingMatrix = (- self.kappa * self.beta * np.eye(self.N * self.M)
                                  + np.random.randn(self.N * self.M, self.N * self.M) * 1e-6)
@@ -240,8 +246,8 @@ class ExperimentRunner():
     def run_simulation(self):
         self.sim_start_time = time.time()
 
-        self.simulation_options = {'stateBound':(self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.L))),
-                                   'stateBoundInputs': (self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.L))),
+        self.simulation_options = {'stateBound':(self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
+                                   'stateBoundInputs': (self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
                                    'num_parallel_converters': self.M,
                                    'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]}
         
@@ -289,6 +295,13 @@ class ExperimentRunner():
 
         self.run_simulation()
         self.run_reconstruction()
+        self.log(f'Size: {self.size}')
+        self.log(f'Number of OOBs: {self.result["num_oob"]}')
+        self.log(f'OOB Rate: {self.result["num_oob"]/self.size}')
+
+        print()
+
+
         print(self.logstr)
 
     def getParams(self):
@@ -297,10 +310,11 @@ class ExperimentRunner():
                 'L':self.L,
                 'beta':self.beta,
                 'sampling_period':self.sampling_period,
-                'input_frequency':self.input_frequency,
-                'input_amplitude':self.input_amplitude,
+                'primary_input_frequency':self.input_frequency,
+                'primary_input_amplitude':self.input_amplitude,
                 'eta2':self.eta2_magnitude,
-                'disturbance_frequencies':self.input_frequencies[1:],
+                'other_input_frequencies':self.all_input_signal_frequencies[1:],
+                'other_input_amplitudes':self.all_input_signal_amplitudes[1:],
                 'size': "{:e}".format(self.size),
                 'num_oob': self.result['num_oob'],
                 'oob_rate': self.result['num_oob'] / self.size,
