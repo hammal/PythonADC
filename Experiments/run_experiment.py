@@ -480,19 +480,6 @@ class ExperimentRunner():
                   'sigma2_reconst': self.sigma2_reconst}
         return {**params, **input_steering_vectors}
 
-    def getParams(self):
-        return {'M':self.M,
-                'N':self.N,
-                'L':self.L,
-                'beta':self.beta,
-                'sampling_period':self.sampling_period,
-                'input_frequency':self.input_frequency,
-                'eta2':self.eta2_magnitude,
-                'disturbance_frequencies':self.input_frequencies[1:],
-                'size': "{:e}".format(self.size),
-                'num_oob': self.result['num_oob'],
-                'oob_rate': self.result['num_oob'] / self.size}
-
 
 def main(experiment_id,
          data_dir,
@@ -570,19 +557,6 @@ def main(experiment_id,
     #   bucket_name=BUCKET_NAME,
     #   file_name=''.join([s3_file_name_prefix,experiment_id,'.params.pkl']),
     #   obj=params)
-
-
-    writeStringToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
-      string=runner.logstr)
-
-    writeCSVDataFrameToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      string=params_string)
 
 
 if __name__ == "__main__":
