@@ -67,7 +67,7 @@ for key, value in simulationSetups.items():
     sim = ADC.Simulator(model, 1. / Ts, 1. / Tc, u)
     controller, y = sim.Run()
     filter = ADC.WienerFilter(value)
-    u_hat = filter.filter(controller)
+    u_hat, logstr = filter.filter(controller)
     results[name] = np.linalg.norm(u - u_hat) / np.double(t.size)
 
     plt.figure(2)
@@ -86,7 +86,7 @@ for key, value in simulationSetups.items():
     sim = ADC.Simulator(model, 1. / Ts, 1. / Tc, u)
     controller, y = sim.Run()
     filter = ADC.WienerFilter(value)
-    u_hat = filter.filter(controller)
+    u_hat, logstr = filter.filter(controller)
     results[name] = np.linalg.norm(u - u_hat) / np.double(t.size)
 
     plt.figure(2)
@@ -122,7 +122,7 @@ plt.show()
 #
 # filter = WienerFilter(filterSpec)
 #
-# u_hat = filter.filter(controller)
+# u_hat, logstr = filter.filter(controller)
 #
 # plt.figure()
 # plt.plot(t, u)
