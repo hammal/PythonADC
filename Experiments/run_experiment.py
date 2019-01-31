@@ -116,7 +116,6 @@ class ExperimentRunner():
         self.all_input_signal_amplitudes = np.zeros(L)
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
 
-
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
         self.finished_simulation = False
         self.finished_reconstruction = False
@@ -283,6 +282,7 @@ class ExperimentRunner():
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
+
 
         systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
         self.eta2_magnitude = np.max(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)
