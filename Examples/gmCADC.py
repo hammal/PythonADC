@@ -154,7 +154,7 @@ filterSpec = {
 
 filter = ADC.WienerFilter(t, model, inputs=(input,), options=filterSpec)
 
-u_hat = filter.filter(ctrl)
+u_hat, logstr = filter.filter(ctrl)
 # stf, ntf = filter.frequencyResponse(fspace)
 # import scipy.signal
 # b,a = scipy.signal.butter(13, fp * Tc * 2)
