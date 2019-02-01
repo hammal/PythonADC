@@ -92,13 +92,16 @@ class Noise(Input):
 
 class System(object):
 
-    def __init__(self, A, c):
+    def __init__(self, A, c, b=None):
         """
         Initialize the Model.
         """
         self.A = np.array(A, dtype=np.float64)
         self.c = np.array(c, dtype=np.float64)
-        # self.b = np.zeros(self.A.shape[0])
+        if b:
+            self.b = b
+        else:
+            self.b = np.zeros(self.A.shape[0])
         # self.b[0] = 1.
 
         self.order = self.A.shape[0]

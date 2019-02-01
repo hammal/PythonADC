@@ -41,8 +41,12 @@ class SNRvsAmplitude(object):
             self.snrVsAmp[index, 0] = est["inputPower"]
             self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (self.bound ** 2 / 2.))
         shuffleMask = np.argsort(self.snrVsAmp[:,0])
+        self.estimates = self.estimates[shuffleMask]
         self.snrVsAmp = self.snrVsAmp[shuffleMask,:]
 
+    def GetMaxSNRPowerSpectralDensity(self):
+        index = np.argmax(self.snrVsAmp[:,1])
+        return self.estimates[index]["performance"]
 
     def ToTextFile(self, filename):
         description = ["IP", "SNR", "TMSNR", "TSNR", "THDN"]
@@ -103,7 +107,7 @@ class SigmaDeltaPerformance(object):
             if fmax > fs / (2. * osr):
                 raise "fmax not in signal bandwith"
             self.fIndex = np.int(fmax/fs * 2 * self.spec.size)
-            print("fIndex given at %i of %i" % (self.fIndex, self.spec.size))
+            # print("fIndex given at %i of %i" % (self.fIndex, self.spec.size))
 
         self.f = self.fIndex * self.fs / (2. * self.N)
         # print("f: %s" % self.f)
