@@ -41,8 +41,12 @@ class SNRvsAmplitude(object):
             self.snrVsAmp[index, 0] = est["inputPower"]
             self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (self.bound ** 2 / 2.))
         shuffleMask = np.argsort(self.snrVsAmp[:,0])
+        self.estimates = self.estimates[shuffleMask]
         self.snrVsAmp = self.snrVsAmp[shuffleMask,:]
 
+    def GetMaxSNRPowerSpectralDensity(self):
+        index = np.argmax(self.snrVsAmp[:,1])
+        return self.estimates[index]["performance"]
 
     def ToTextFile(self, filename):
         description = ["IP", "SNR", "TMSNR", "TSNR", "THDN"]
