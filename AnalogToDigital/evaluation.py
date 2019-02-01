@@ -45,9 +45,9 @@ class SNRvsAmplitude(object):
         self.snrVsAmp = self.snrVsAmp[self.shuffleMask,:]
 
     def GetMaxSNRPowerSpectralDensity(self):
-        index = np.argmax(self.snrVsAmp[:,1])
-        print(index)
-        print(self.shuffleMask[index])
+        index = np.argmax(-self.snrVsAmp[:,4])
+        # print(index)
+        # print(self.shuffleMask[index])
         return self.estimates[self.shuffleMask[index]]["performance"]
 
     def ToTextFile(self, filename):
