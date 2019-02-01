@@ -40,14 +40,15 @@ class SNRvsAmplitude(object):
             DR, self.snrVsAmp[index,1], THD, self.snrVsAmp[index,4], ENOB, self.snrVsAmp[index,2] = est["performance"].Metrics(OSR)
             self.snrVsAmp[index, 0] = est["inputPower"]
             self.snrVsAmp[index, 3] = self.theoreticalPerformance(self.snrVsAmp[index,0] * (self.bound ** 2 / 2.))
-        shuffleMask = np.argsort(self.snrVsAmp[:,0])
-        print(shuffleMask)
-        self.estimates = self.estimates[shuffleMask]
-        self.snrVsAmp = self.snrVsAmp[shuffleMask,:]
+        self.shuffleMask = np.argsort(self.snrVsAmp[:,0])
+        
+        self.snrVsAmp = self.snrVsAmp[self.shuffleMask,:]
 
     def GetMaxSNRPowerSpectralDensity(self):
         index = np.argmax(self.snrVsAmp[:,1])
-        return self.estimates[index]["performance"]
+        print(index)
+        print(self.shuffleMask[index])
+        return self.estimates[self.shuffleMask[index]]["performance"]
 
     def ToTextFile(self, filename):
         description = ["IP", "SNR", "TMSNR", "TSNR", "THDN"]
