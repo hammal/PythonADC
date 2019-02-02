@@ -107,15 +107,13 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
-        
-        self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
         self.border = np.int(self.size //100)
         self.all_input_signal_amplitudes = np.zeros(L)
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
-        self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
+
         self.finished_simulation = False
         self.finished_reconstruction = False
         if not self.data_dir.exists():
@@ -151,7 +149,10 @@ class ExperimentRunner():
                         mixingPi[k] = self.beta * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 else:
-                    raise NotImplemented
+                    for k in range(N-1):
+                        mixingPi[k] = self.beta * np.sqrt(M/L) * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.L)))
+                        self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
+                    # raise NotImplemented
                 print("A = {}".format(self.A))
         else:
             raise NotImplemented
@@ -168,9 +169,17 @@ class ExperimentRunner():
             self.all_input_signal_frequencies[i] = allowed_signal_frequencies[k]
             self.all_input_signal_amplitudes[i] = input_amplitude
 
+        # M x L selector matrix for the b-vectors
+        selectorMatrix = np.array([
+                                    [1, 0],
+                                    [0, 1],
+                                    [1, 0],
+                                    [0, 1]
+                                  ])
         for i in range(self.L):
             vector = np.zeros(self.M*self.N)
-            vector[0:self.M] = (mixingPi[0][:,i]) * np.sqrt(M-L+1) # self.beta 
+            # Scale the input vector up by sqrt(number of channels per signal)
+            vector[0:self.M] =  np.sqrt(M/L) * np.dot(mixingPi[0], selectorMatrix[:,i]) / np.linalg.norm(selectorMatrix[:,i],1) # self.beta  (mixingPi[0][:,i])
             self.input_signals.append(system.Sin(self.sampling_period,
                                                  amplitude=self.all_input_signal_amplitudes[i],
                                                  frequency=self.all_input_signal_frequencies[i],
@@ -183,6 +192,10 @@ class ExperimentRunner():
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
+
+        systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
+        self.eta2_magnitude = np.max(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)#((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
+        self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
 
         self.ctrlMixingMatrix = (- self.kappa * self.beta * np.eye(self.N * self.M)
                                  + np.random.randn(self.N * self.M, self.N * self.M) * 1e-6)
@@ -305,21 +318,23 @@ class ExperimentRunner():
         print(self.logstr)
 
     def getParams(self):
-        return {'M':self.M,
-                'N':self.N,
-                'L':self.L,
-                'beta':self.beta,
-                'sampling_period':self.sampling_period,
-                'primary_input_frequency':self.input_frequency,
-                'primary_input_amplitude':self.input_amplitude,
-                'eta2':self.eta2_magnitude,
-                'other_input_frequencies':self.all_input_signal_frequencies[1:],
-                'other_input_amplitudes':self.all_input_signal_amplitudes[1:],
-                'size': "{:e}".format(self.size),
-                'num_oob': self.result['num_oob'],
-                'oob_rate': self.result['num_oob'] / self.size,
-                'sigma2_thermal': self.sigma2_thermal,
-                'sigma2_reconst': self.sigma2_reconst}
+        input_steering_vectors = {f'b_{i}': self.input_signals[i].steeringVector for i in range(self.L)}
+        params = {'M':self.M,
+                  'N':self.N,
+                  'L':self.L,
+                  'beta':self.beta,
+                  'sampling_period':self.sampling_period,
+                  'primary_input_frequency':self.input_frequency,
+                  'primary_input_amplitude':self.input_amplitude,
+                  'eta2':self.eta2_magnitude,
+                  'other_input_frequencies':self.all_input_signal_frequencies[1:],
+                  'other_input_amplitudes':self.all_input_signal_amplitudes[1:],
+                  'size': "{:e}".format(self.size),
+                  'num_oob': self.result['num_oob'],
+                  'oob_rate': self.result['num_oob'] / self.size,
+                  'sigma2_thermal': self.sigma2_thermal,
+                  'sigma2_reconst': self.sigma2_reconst}
+        return {**params, **input_steering_vectors}
 
 
 def main(experiment_id,
