@@ -109,8 +109,6 @@ class ExperimentRunner():
         self.sigma2_reconst = sigma2_reconst
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
-        
-        self.eta2_magnitude = ((beta * sampling_period * OSR)/ (np.pi))**(2*N) * (M**(N-2))
 
         self.border = np.int(self.size //100)
         self.all_input_signal_amplitudes = np.zeros(L)
@@ -282,7 +280,6 @@ class ExperimentRunner():
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
-
 
         systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
         self.eta2_magnitude = np.max(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)
