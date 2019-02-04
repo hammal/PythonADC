@@ -126,12 +126,11 @@ class ExperimentRunner():
 
 
         if self.input_frequency == None:
-            self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
+            self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)# + np.random.randn()
             self.log(f'Setting f_sig = f_s/(2*OSR) = {self.input_frequency}')
 
 
         if self.systemtype == "ParallelIntegratorChain":
-            self.t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)
 
             self.A = np.zeros((self.N*self.M, self.N*self.M))
             mixingPi = np.empty((self.N-1, self.M, self.M))
@@ -155,6 +154,8 @@ class ExperimentRunner():
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                     # raise NotImplemented
                 print("A = {}".format(self.A))
+            else:
+              mixingPi = [np.zeros((M,M))]
         else:
             raise NotImplemented
 
@@ -171,16 +172,22 @@ class ExperimentRunner():
             self.all_input_signal_amplitudes[i] = input_amplitude
 
         # M x L selector matrix for the b-vectors
-        selectorMatrix = np.array([
-                                    [1, 0],
-                                    [0, 1],
-                                    [1, 0],
-                                    [0, 1]
-                                  ])
+        if L == 2:
+          selectorMatrix = ((1./np.sqrt(2)) * np.array([
+                                [1, 0],
+                                [0, 1],
+                                [1, 0],
+                                [0, 1]
+                                      ]))
+        elif L == M or L == 1:
+          selectorMatrix = np.eye(M)
+
+        # uPi,sPi,vhPi = np.linalg.svd(mixingPi[0])
+        # vhPi[np.abs(vhPi) < 1e-16] = 0
         for i in range(self.L):
             vector = np.zeros(self.M*self.N)
             # Scale the input vector up by sqrt(number of channels per signal)
-            vector[0:self.M] =  np.sqrt(M/L) * np.dot(mixingPi[0], selectorMatrix[:,i]) / np.linalg.norm(selectorMatrix[:,i],1) # self.beta  (mixingPi[0][:,i])
+            vector[0:self.M] =  np.dot(mixingPi[0], selectorMatrix[:,i]) * np.sqrt(M/L) # self.beta * np.sqrt(M/L) * vhPi[i]
             self.input_signals.append(system.Sin(self.sampling_period,
                                                  amplitude=self.all_input_signal_amplitudes[i],
                                                  frequency=self.all_input_signal_frequencies[i],
@@ -188,9 +195,6 @@ class ExperimentRunner():
                                                  steeringVector=vector))
             print(f'b_{i} = {self.input_signals[i].steeringVector}')
         self.input_signals = tuple(self.input_signals)
-
-
-
         #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
 
         self.c = np.eye(self.N * self.M)
@@ -260,6 +264,7 @@ class ExperimentRunner():
 
 
     def run_simulation(self):
+        t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         self.sim_start_time = time.time()
 
         self.simulation_options = {'stateBound':(self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
@@ -267,8 +272,8 @@ class ExperimentRunner():
                                    'num_parallel_converters': self.M,
                                    'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]}
         
-        self.sim = simulator.Simulator(self.sys, self.ctrl, options=self.simulation_options)
-        self.result = self.sim.simulate(self.t, self.input_signals)
+        sim = simulator.Simulator(self.sys, self.ctrl, options=self.simulation_options)
+        self.result = sim.simulate(t, self.input_signals)
 
         self.sim_run_time = time.time() - self.sim_start_time
         self.log(self.result['log'])
@@ -277,18 +282,19 @@ class ExperimentRunner():
 
 
     def run_reconstruction(self):
-        self.recon_time_start = time.time()
+        t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
+        recon_time_start = time.time()
 
         self.eta2 = np.ones(self.M * self.N) * self.eta2_magnitude
         self.reconstruction_options = {'eta2':self.eta2,
                                        'sigmaU2':[1.]*self.M,
                                        'noise':[{'std':self.sigma2_reconst,
                                                  'steeringVector': self.beta*np.eye(self.N * self.M)[:,i], 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]}
-        self.reconstruction = reconstruction.WienerFilter(self.t, self.sys, self.input_signals, self.reconstruction_options)
+        self.reconstruction = reconstruction.WienerFilter(t, self.sys, self.input_signals, self.reconstruction_options)
         tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
 
         self.input_estimates = tmp_estimates[self.border:-self.border]
-        self.recon_run_time = time.time() - self.recon_time_start
+        self.recon_run_time = time.time() - recon_time_start
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
         self.finished_reconstruction = True
@@ -303,7 +309,6 @@ class ExperimentRunner():
         #print(self.logstr)
 
         self.size = round(1./self.sampling_period)
-        self.t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)
         # self.data_dir = self.data_dir.parent / ('unitTest_' + self.data_dir.name)
         # if not self.data_dir.exists():
         #     self.data_dir.mkdir(parents=True)
