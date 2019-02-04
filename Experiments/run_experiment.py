@@ -156,7 +156,6 @@ class ExperimentRunner():
             else:
               mixingPi = [np.zeros((M,M))]
 
-
             # Define input signals:
             self.input_signals = []
             self.all_input_signal_frequencies = np.zeros(L)
