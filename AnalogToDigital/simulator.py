@@ -144,6 +144,7 @@ class Simulator(object):
                 if any(oob_states):
                     self.log("STATE BOUND EXCEEDED! Sample #: {}".format(current_sample))
                     self.log("X_{} = {}".format(oob_states, self.state[oob_states]))
+<<<<<<< HEAD
                     self.num_oob += 1
                     #self.state[above] = bound
                     #self.state[below] = -bound
@@ -154,9 +155,11 @@ class Simulator(object):
                 oob_states = np.arange(self.system.order)[np.logical_or(above,below)]
                 if any(oob_states):
                     self.log("STATE BOUND EXCEEDED! X_{} = {}".format(oob_states, self.state[oob_states]))
+=======
+>>>>>>> No clipping of states when OOB, record sample number in the log
                     self.num_oob += 1
-                    self.state[above] = bound
-                    self.state[below] = -bound
+                    #self.state[above] = bound
+                    #self.state[below] = -bound
 
                 oob_states = np.arange(self.system.order)[np.logical_or(above,below)]
                 if any(oob_states):
