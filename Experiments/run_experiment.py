@@ -28,6 +28,7 @@ import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 
 BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
+DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
 
 
 def hadamardMatrix(n):
@@ -63,6 +64,7 @@ def uploadTos3(s3_connection, bucket_name, file_name, obj):
       .Object(bucket_name, file_name)
       .put(Body=pickle_buffer.getvalue()))
     pickle_buffer.close()
+
 
 
 class ExperimentRunner():
@@ -256,11 +258,25 @@ class ExperimentRunner():
 
 
     def saveAll(self):
-        file_path = self.data_dir / 'ExperimentRunner.pkl'
-        with file_path.open(mode='wb') as outfile:
-            pkl.dump(self.__dict__, outfile)
-        self.log("ExperimentRunner saved at \"{}\"".format(file_path))
-        self.saveLog()
+      save_dir = self.data_dir / self.experiment_id
+      params = self.getParams()
+      params_string = ''
+      for key in params.keys():
+        params_string = ''.join([params_string, f'{key}: {params[key]}\n'])
+
+      with open(save_dir / f'{self.experiment_id}.params', 'w') as f:
+        f.write(params_string)
+
+      with open(save_dir / f'{self.experiment_id}.params.pkl', 'wb') as f:
+        pkl.dump(params, f)
+
+      with open(save_dir / f'{self.experiment_id}.log', 'w') as f:
+        f.write(self.logstr)
+        # file_path = self.data_dir / 'ExperimentRunner.pkl'
+        # with file_path.open(mode='wb') as outfile:
+        #     pkl.dump(self.__dict__, outfile)
+        # self.log("ExperimentRunner saved at \"{}\"".format(file_path))
+        # self.saveLog()
 
 
     def run_simulation(self):
@@ -364,9 +380,13 @@ def main(experiment_id,
          sigma2_reconst=1e-6,
          num_periods_in_simulation=20):
     
+    save_dir = DATA_STORAGE_PATH / experiment_id
+    if not save_dir.exists():
+      save_dir.mkdir(parents=True)
+      
     runner = ExperimentRunner(experiment_id,
-                              data_dir,
-                              M, 
+                              DATA_STORAGE_PATH,
+                              M,
                               N,
                               L,
                               input_phase,
