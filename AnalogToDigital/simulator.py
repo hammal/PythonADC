@@ -51,7 +51,7 @@ class Simulator(object):
         t0 = t[0]
         index = 0
         tnew = t
-
+        current_sample = 0
 
         if 'jitter' in self.options:
             jitter_range = self.options['jitter']['range']
@@ -142,10 +142,11 @@ class Simulator(object):
 
                 oob_states = np.arange(self.system.order)[np.logical_or(above,below)]
                 if any(oob_states):
-                    self.log("STATE BOUND EXCEEDED! X_{} = {}".format(oob_states, self.state[oob_states]))
+                    self.log("STATE BOUND EXCEEDED! Sample #: {}".format(current_sample))
+                    self.log("X_{} = {}".format(oob_states, self.state[oob_states]))
                     self.num_oob += 1
-                    self.state[above] = bound
-                    self.state[below] = -bound
+                    #self.state[above] = bound
+                    #self.state[below] = -bound
 
                 oob_states = np.arange(self.system.order)[np.logical_or(above,below)]
                 if any(oob_states):
@@ -154,6 +155,7 @@ class Simulator(object):
                     self.state[below] = -bound
 
             # print(self.state)
+            current_sample += 1
             self.control.update(self.state)
 
         # Return simulation object
