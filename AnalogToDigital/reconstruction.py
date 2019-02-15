@@ -9,6 +9,8 @@ from AnalogToDigital.system import Noise
 # import copy
 from scipy.integrate import odeint
 import scipy.optimize
+import matplotlib.pyplot as plt
+
 CHAIN_system = True
 
 def bruteForceCare(A, B, Q, R):
@@ -408,16 +410,16 @@ class WienerFilterWithPostFiltering(WienerFilter):
 
     u_hat = C_filter^(T) (Wf + Wb)^(-1)(Wf mf + Wb mb)
 
-    To achive this we additionally make the following changes:
+    To achieve this we additionally make the following changes:
     - Vf and Vb needs to be recomputed for the new larger system
-    - Af and Ab gets reparameterised as Af_new = Wf Af Vf and Ab_new = Wf Ab Vb
+    - Af and Ab gets reparameterized as Af_new = Wf Af Vf and Ab_new = Wf Ab Vb
     - w is computed as solve(Wf + Wb, C_filter)
-    - Bf and Bb are reparameterised as Bf_new = Wf Bf and Bb_new = Wb Bb
+    - Bf and Bb are reparameterized as Bf_new = Wf Bf and Bb_new = Wb Bb
     """
 
     def __init__(self, t, system, inputs, postFilteringSystem, options={}):
         """
-        Additonally to the init function in Wiener Filter a postFilteringSystem
+        Additionally to the init function in Wiener Filter a postFilteringSystem
         needs to be provided. This postfilteringSystem must provide a MIMO filter
         that has the same number of inputs as the the number of inputs to the
         system.
@@ -556,7 +558,7 @@ class DiscreteTimeKalmanFilter(object):
     """
     def __init__(self, t, system, inputs, options={}):
         """
-        This constructor requries:
+        This constructor requires:
         - t which are the times to reconstruct at (assumed to be uniformly spaced)
         - a system model
         - inputs an iterable of inputs to be estimated
@@ -656,7 +658,7 @@ class DiscreteTimeKalmanFilter(object):
                 self.w = self.inputs[0].steeringVector.transpose() * self.sigmaU2
         else:
             raise NotImplemented
-
+        
 
 
     def filter(self, control, outputGain = .25):
@@ -676,7 +678,7 @@ class DiscreteTimeKalmanFilter(object):
             self.Bf = self.Bf * 0
             self.outputGain = 1.
 
-        # Initalise memory
+        # Initialise memory
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float)
         mf = np.zeros((self.order, control.size),dtype=np.float)
         Vf = [np.eye(self.order, dtype=np.float) * 1e15] * control.size
@@ -708,6 +710,7 @@ class DiscreteTimeKalmanFilter(object):
             # # print(np.dot(self.Ad, np.dot(F[index - 1], mf[:, index - 1]) + np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], observation[index - 1])))))
             # mf[:, index] = np.dot(self.Ad, np.dot(F[index - 1], mf[:, index - 1] + np.dot(self.Bf, control[index])) + np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], observation[index - 1]))))
             # print(mf[:, index])
+
         for index in range(control.size - 2, 0, -1):
             temp = np.dot(F[index].transpose(),self.Ad.transpose())
             W_tilde[index] = np.dot(temp, np.dot(W_tilde[index + 1], temp.transpose())) + np.dot(self.system.c, np.dot(G[index], self.system.c.transpose()))
@@ -726,6 +729,331 @@ class DiscreteTimeKalmanFilter(object):
         self.VX = VX
         self.VXXm = VXXm
         return u
+
+class Calibration3(object):
+    """
+    This is the Kalman filter approach to the calibration problem where
+    Covariance is not assumed fixed and control sequences are treated as both
+    observations and input.
+
+    In contrast to the Discrete Time Calibration this method relies on a known input signal.
+    """
+    def __init__(self, t, system, inputs, control, options={}, PLOTS=True):
+        """
+        This constructor requires:
+        - t which are the times to reconstruct at (assumed to be uniformly spaced)
+        - a system model
+        - inputs an iterable of inputs to be estimated
+        - options
+        """
+        self.Ts = t[1] - t[0]
+        self.system = system
+        self.Amask = system.A != 0
+        self.inputs = inputs
+        self.order = self.system.order
+        self.noise = []
+        self.bound = 1.
+
+        # Setup
+        self.size = control.size
+        self.s = [np.zeros(self.order)] * self.size
+        # Store control signals
+        for index in range(self.size):
+            self.s[index] = control[index]
+
+        self.mixingMatrix = control.mixingMatrix
+        
+
+        if 'eta2' in options:
+            self.eta2 = options['eta2']
+        else:
+            self.eta2 = np.ones(self.order)
+
+        if 'noise' in options:
+            for source in options['noise']:
+                self.noise.append(Noise(standardDeviation=source['std'], steeringVector=source['steeringVector'], name=source["name"]))
+
+        if 'boundedIterations' in options:
+            self.boundedIterations = options['boundedIterations']
+        else:
+            self.boundedIterations = 0
+
+        if PLOTS:
+            self.fig = plt.figure()
+            self.ax = self.fig.add_subplot(111)
+            self.ax.set_ylim([-2 * self.bound, 2 * self.bound])
+            self.lines = []
+            dummy = np.zeros(self.size)
+            for index in range(self.order):
+                line, = self.ax.plot(t, dummy)
+                self.lines.append(line)
+            
+        
+
+    def plotStateTrajectories(self): 
+        # Unpack states into numpy array
+        tmp = np.zeros((self.system.order, len(self.mX)))
+        for index, sample in enumerate(self.mX):
+            tmp[:, index] = sample
+
+        max = np.amax(tmp)
+        min = - np.amax(-tmp)
+        self.ax.set_ylim([min, max])
+
+        for index, line in enumerate(self.lines):
+            line.set_ydata(tmp[index, :])
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+    def calibrate(self, theta0, numberOfIterations = 5):
+   
+
+        # Compute Noise Input steering vector
+        B = np.zeros((self.order, len(self.noise)))
+        for index, noiseTerm in enumerate(self.noise):
+            B[:, index] = noiseTerm.steeringVector * noiseTerm.std
+        theta = np.copy(theta0)
+
+        A = self.thetaToSystem(theta)
+        # Compute Noise contribution
+        self.Vb  = self.integrate(A, B, [0., self.Ts])
+        # This defines the the covariance matrix in the Mahalanobis distance
+        self.W_epsilon = np.linalg.inv(self.Vb)
+
+        self.calibration = {"A": A}
+
+
+        for index in range(numberOfIterations):
+            # Theta to system matrix
+            self.calibration["A"] = self.thetaToSystem(theta)
+            # # Compute discrete state transition vector
+            self.Ad = self.discreteSystemTimeStep(self.calibration["A"], [0., self.Ts])
+            # # Compute Noise contribution
+            # self.Vb  = self.integrate(self.calibration["A"], B, [0., self.Ts])
+            # # This defines the the covariance matrix in the Mahalanobis distance
+            # self.W_epsilon = np.linalg.inv(self.Vb)
+
+            # print("Wepsilon:\n%s" % self.W_epsilon)
+
+            # Compute Bf and Bb for this type of control
+            self.Bf = self.computeControlTrajectories(self.calibration["A"])
+
+            # E step
+            # Compute posterior densities conditioned on the parameters of A
+            self.filter(outputGain = self.bound / 2)
+            self.plotStateTrajectories()
+            # M step
+            # Create the cost function
+            def costFunction(Theta):
+                return self.costFunctionA(self.thetaToSystem(Theta))
+            res = scipy.optimize.minimize(costFunction, theta)
+            print("Theta from Mstep: %s" % res.x)
+            theta = res.x
+
+        return theta
+
+    def thetaToSystem(self, theta):
+        """
+        Helper function to convert parameter vector into system matrices
+        """
+        A = np.zeros((self.order, self.order))
+        Acount = np.sum(self.Amask)
+        A[self.Amask] = np.array(theta[:Acount])
+        return A
+    
+    def systemToTheta(self, A):
+        """
+        Helper function to convert system matrix to theta vector
+        """
+        Amask = A != 0
+        return A[Amask].flatten().tolist()
+
+    def costFunctionA(self, A):
+        Ad = self.discreteSystemTimeStep(A, [0., self.Ts])
+        W = np.zeros(A.shape)
+        constantInput = self.InputContribution(A, 1)
+        BfB = self.computeControlTrajectories(A)
+        Bfb = self.inputSteeringMatrix(A)
+        Weps = self.W_epsilon
+        return  np.trace(
+                    np.dot(Weps, 
+                        np.dot(Ad, np.dot(self.X1X1, Ad.transpose())) \
+                        +   np.dot(BfB, np.dot(self.S1S1, BfB.transpose())) \
+                        +   np.dot(Bfb, np.dot(self.U1U1, Bfb.transpose())) \
+                    )
+                ) \
+                - 2 * np.trace(
+                    np.dot(
+                        Weps,
+                            np.dot(self.X2X1, Ad.transpose()) \
+                        +   np.dot(BfB, np.dot(self.S1X1, Ad.transpose())) \
+                        +   np.dot(Bfb, np.dot(self.U1X1, Ad.transpose())) \
+                        +   np.dot(self.X2S1, BfB.transpose()) \
+                        +   np.dot(Bfb, np.dot(self.U1S1, BfB.transpose())) \
+                        +   np.dot(self.X2U1, Bfb.transpose()) \
+                        )
+                    )
+
+    def integrate(self, A, b, T):
+        """
+        Compute:
+        V = int_T[0]^T[1] exp(A * t) b b^T exp(A^T * t)
+        """
+        def derivative(x, t):
+            Ad = scipy.linalg.expm(A * t)
+            return np.dot(Ad, np.dot(b, np.dot(b.transpose(), Ad.transpose()))).flatten()
+        V = odeint(derivative, np.zeros(self.system.order ** 2), np.array(T))[-1,:].reshape(self.system.A.shape)
+        return V
+
+    def discreteSystemTimeStep(self, A, T):
+        """
+        Compute: exp(A Ts)
+        """
+        return scipy.linalg.expm(A * (T[1] - T[0]))
+        
+
+
+    def __str__(self):
+        return "Ad = \n%s\nBf = \n%s\n" % (self.Af, self.Bf)
+
+    def computeControlTrajectories(self, A):
+        Bf = np.zeros((self.order, self.order))
+        for controlIndex in range(self.order):
+            def ForwardDerivative(x, t):
+                hom = np.dot(A, x.reshape((self.order,1))).flatten()
+                control = np.zeros(self.order)
+                control[controlIndex] = 1
+                return hom + control
+
+            Bf[:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
+
+        Bf = np.dot(Bf, self.mixingMatrix)
+        return Bf
+        
+    def InputContribution(self, A, index):
+        result = np.zeros(self.order)
+        T = np.array([index - 1, index]) * self.Ts
+        for input in self.inputs:
+            def derivative(x, t):
+                hom = np.dot(A, x.reshape((self.order,1))).flatten()
+                return hom + input.fun(t).flatten()
+            result += odeint(derivative, np.zeros(self.order), T)[-1, :]
+        return result
+
+    def inputSteeringMatrix(self, A):
+        U = np.zeros((self.order, self.order))
+        T = np.array([0, 1.]) * self.Ts
+        for index, input in enumerate(self.inputs):
+            def derivative(x, t):
+                hom = np.dot(A, x.reshape((self.order,1))).flatten()
+                return hom + input.steeringVector
+            U[:, index] = odeint(derivative, np.zeros(self.order), T)[-1, :]
+        return U
+
+    def inputValueMatrix(self, index):
+        u = np.zeros(self.order)
+        for index, input in enumerate(self.inputs):
+            u[index] = input.scalarFunction(index * self.Ts)
+        return u
+
+    def filter(self, outputGain = .25):
+        """
+        This is the actual filter operation. The controller needs to be a
+        Controller class instance from system.py.
+        """
+        
+        infty = self.eta2[0] * 1e8
+        # r2 = self.eta2[0] / infty
+        r2 = self.eta2[0]
+
+        # Initialise memory
+        mf = np.zeros((self.order, self.size),dtype=np.float)
+        Vf = [np.eye(self.order, dtype=np.float) * 1e15] * self.size
+        G = [np.eye(self.system.outputOrder, dtype=np.float)] * self.size
+        F = [np.zeros((self.order, self.order), dtype=np.float)]* self.size
+        xi = np.zeros_like(mf, dtype=np.float)
+        W_tilde = [np.zeros((self.order, self.order),dtype=np.float)] * self.size
+        observation = [np.zeros(self.system.outputOrder,dtype=np.float)] * self.size
+        sigmaZ2 = [self.eta2] * self.size
+
+        # Compute observations
+        for index in range(self.size):
+            observation[index] = outputGain * self.s[index]
+
+        mX = [np.zeros(self.order)] * self.size
+        VX = [1e20 * np.eye(self.order)] * self.size
+        self.X1X1 = np.zeros((self.order, self.order))
+        self.S1S1 = np.zeros((self.order, self.order))
+        self.U1U1 = np.zeros((self.order, self.order))
+        
+        self.X2X1 = np.zeros((self.order, self.order))
+        self.S1X1 = np.zeros((self.order, self.order))
+        self.U1X1 = np.zeros((self.order, self.order))
+        self.X2S1 = np.zeros((self.order, self.order))
+        self.U1S1 = np.zeros((self.order, self.order))
+        self.X2U1 = np.zeros((self.order, self.order))
+
+        u = self.inputValueMatrix(0)
+
+        def messagePassing():
+            for index in range(1, self.size):
+                G[index - 1] = np.linalg.inv(np.diag(sigmaZ2[index-1]) + np.dot(self.system.c.transpose(), np.dot(Vf[index - 1], self.system.c)))
+                F[index - 1] = np.eye(self.order) - np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], self.system.c.transpose())))
+                Vf[index] = np.dot(self.Ad, np.dot(F[index - 1], np.dot(Vf[index - 1], self.Ad.transpose()))) + self.Vb
+                # print(np.dot(self.Ad, np.dot(F[index - 1], mf[:, index - 1]) + np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], observation[index - 1])))))
+                mf[:, index] = np.dot(self.Ad, np.dot(F[index - 1], mf[:, index - 1]) + np.dot(Vf[index - 1], np.dot(self.system.c, np.dot(G[index - 1], observation[index - 1])))) \
+                                + np.dot(self.Bf, self.s[index - 1]) + self.InputContribution(self.calibration["A"], index)
+
+            for index in range(self.size - 2, 0, -1):
+                temp = np.dot(F[index].transpose(),self.Ad.transpose())
+                W_tilde[index] = np.dot(temp, np.dot(W_tilde[index + 1], temp.transpose())) + np.dot(self.system.c, np.dot(G[index], self.system.c.transpose()))
+                xi[:, index] = np.dot(temp, xi[:, index + 1]) + np.dot(self.system.c, np.dot(G[index], np.dot(self.system.c.transpose(), mf[:, index]) - observation[index]))
+                # print(xi[:, index])
+                mX[index] = mf[:, index] - np.dot(Vf[index], xi[:, index])
+                VX[index] = Vf[index] - np.dot(Vf[index], W_tilde[index], Vf[index])
+                
+                self.X1X1 += VX[index] + np.outer(mX[index], mX[index])
+                self.S1S1 += np.outer(self.s[index], self.s[index])
+                self.U1U1 += np.outer(u, u)
+                
+                if index < self.size - 2:
+                    self.X2X1 += np.array(np.dot(F[index], np.dot(Vf[index], np.dot(self.Ad.transpose(), (np.eye(self.order) - np.dot(W_tilde[index + 1], Vf[index + 1]))))) \
+                                + np.outer(mX[index], mX[index+1])).transpose()
+                self.S1X1 += np.outer(self.s[index], mX[index])
+                self.U1X1 += np.outer(u, mX[index])
+                self.X2S1 += np.outer(mX[index + 1], self.s[index])
+                self.U1S1 += np.outer(u, self.s[index])
+                self.X2U1 += np.outer(mX[index + 1], u)
+
+            # self.mf = mf
+            # self.Vf = Vf
+            # self.xi = xi
+            # self.W_tilde = W_tilde
+            self.mX = mX
+            # self.VX = VX
+            # self.VXXm = VXXm
+
+
+        def updaterObservationVarianceRandom(index):
+            comp = (self.bound / 2) ** 2
+            y = np.dot(self.system.c.transpose(), mf[:, index] - np.dot(Vf[index], xi[:, index]))
+            # print("For index %s: y = %s" % (index, y))
+
+            for outputIndex in range(self.system.outputOrder):
+                if (y[outputIndex] - observation[index][outputIndex])**2 <= comp:
+                    sigmaZ2[index][outputIndex] = infty
+                else:
+                    # sigmaZ2[index][outputIndex] = 0.
+                    sigmaZ2[index][outputIndex] = r2
+
+         # for round in range(control.size):
+        messagePassing()
+        for round in range(self.boundedIterations):
+            # ordering = np.random.choice(self.size, self.size, replace=False)
+            ordering = np.arange(self.size)
+            for _ in range(self.size):
+                updaterObservationVarianceRandom(ordering[index])
+            messagePassing()
 
 
 class DiscreteTimeKalmanFilterWithBoundedOutput(DiscreteTimeKalmanFilter):
@@ -1272,3 +1600,87 @@ class SelfCalibration(object):
 # if __name__ == "__main__":
 #     import doctest
 #     doctest.testmod()
+
+
+class SelfCalibrationSecond(object):
+    """
+    This calibration rutine estimates the parameters of an ADC
+    """
+
+    def __init__(self, t, system, inputs, control, options={}):
+
+        self.Ts = t[1] - t[0]
+        self.system = system
+        self.inputs = inputs
+        self.order = self.system.order
+        self.noise = []
+
+        self.Amask = system.A != 0
+        self.Bmask = control.mixingMatrix != 0
+
+        print("A and B masks:\n%s,\n%s" % (self.Amask, self.Bmask))
+
+        self.size = control.size
+        self.s = [np.zeros(self.order)] * self.size
+        self.f = [np.zeros(self.order)] * self.size
+
+        # Store the controls in vector
+        for index in range(self.size):
+            self.s[index] = control[index]
+
+    def calibrate(self, theta):
+        res = scipy.optimize.minimize(self.costFunction, theta, options={'disp': True})
+        return res
+
+    def costFunction(self, theta):
+        # Compute the f functions
+        self.computeTrajecteries(theta)
+
+        # Evaluate cost
+        cost = 0.
+        bound = 1.
+        scaling = bound / 2.
+        for index in range(int(50), self.size):
+            # print(self.s[index])
+            temp = np.abs(self.s[index] * scaling - self.f[index])**2
+            # print(temp, cost)
+            for o in range(self.order):
+                if temp[o] >= 0:
+                    cost += temp[o]
+        return cost
+
+    def thetaToSystem(self, theta):
+        A = np.zeros((self.order, self.order))
+        B = np.zeros_like(A)
+        Acount = np.sum(self.Amask)
+        Bcount = np.sum(self.Bmask)
+        A[self.Amask] = np.array(theta[:Acount])
+        B[self.Bmask] = np.array(theta[Acount:Acount + Bcount])
+        C = np.eye(self.order)
+        Af = scipy.linalg.expm(A * self.Ts)
+        Bf = np.zeros((self.order, self.order))
+
+        for controlIndex in range(self.order):
+            def derivative(x, t):
+                hom = np.dot(A, x.reshape((self.order,1))).flatten()
+                control = np.zeros(self.order)
+                control[controlIndex] = 1
+                return hom + control
+
+            
+            Bf[:, controlIndex] = odeint(derivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
+
+        Bf = np.dot(Bf, B)
+        print("Computed System:\ntheta=%s\nA=%s\nB=%s" % (theta, A, B))
+        return Af, Bf, C
+    
+    def systemToTheta(self, A, B):
+        Amask = A != 0
+        Bmask = B != 0
+        return A[Amask].flatten().tolist() + B[Bmask].flatten().tolist()
+
+    def computeTrajecteries(self, theta):
+        A, B, C = self.thetaToSystem(theta)
+        state = np.zeros((self.order, 1))
+        for index in range(self.size-1):
+            self.f[index+1] = np.dot(C, np.dot(A, self.f[index]) + np.dot(B, self.s[index]))

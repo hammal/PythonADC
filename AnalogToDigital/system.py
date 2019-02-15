@@ -75,6 +75,21 @@ class Sin(Input):
         return self.amplitude * np.sin(2. * np.pi * self.frequency * t + self.phase) + self.offset
 
 
+class Constant(Input):
+    """
+    A pure sinusodial is only parametericed by amplitude frequency and phase.
+    """
+    def __init__(self, amplitude, steeringVector, name="Constant"):
+        self.amplitude = amplitude
+        self.steeringVector = steeringVector
+        self.name = name
+
+    def fun(self, t):
+        return self.steeringVector * self.scalarFunction(t) 
+
+    def scalarFunction(self, t):
+        return self.amplitude
+
 class Noise(Input):
     """
     Gaussian white noise
@@ -124,6 +139,7 @@ class System(object):
         Here Quantization could be implemented!
         """
         return np.dot(self.c.transpose(), state).flatten()
+
 
 class Control(object):
     """
@@ -176,16 +192,29 @@ class Control(object):
         else:
             self.name = 'default'
 
+        if 'bound' in options:
+            self.bound = options['bound']
+        else:
+            self.bound = 1.
+        
+        if 'bitsPerControl' in options:
+            self.bitsPerControl = options['bitsPerControl']
+        else:
+            self.bitsPerControl = 1
+        self.scale = 1./(2 ** self.bitsPerControl - 1)
+        self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
+
     def __getitem__(self, item):
         """
         this function is for retriving control decisions from memory at index k
         as:
         control[k]
         """
+        
         if self.scalingSequence:
-            return np.dot(self.scalingSequence(item), self.memory[item])
+            return self.scale * np.dot(self.scalingSequence(item), self.memory[item])
 
-        return self.memory[item]
+        return self.scale * self.memory[item]
 
     def getIndex(self, item):
         """
@@ -206,11 +235,28 @@ class Control(object):
         """
         return np.unpackbits(np.array([value], dtype=np.uint8))[self.leftpadd:]
 
+    def AlgorithmicConverter(self, vector, code, bitNumber):
+        # print(vector, code, bitNumber)
+        bit = (vector > self.references).flatten() * 2 - 1
+        newvector = 2 * vector - bit * self.bound
+        code += 2 ** (self.bitsPerControl - bitNumber) * bit
+        if bitNumber < self.bitsPerControl:
+            return self.AlgorithmicConverter(newvector, code, bitNumber + 1)
+        else:
+            return code 
+        
+
     def update(self, state):
         """
         This is a function that sets the next control decisions
         """
-        self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
+        # Project to control space
+        projectedState = -np.dot(self.projectionMatrix, state)
+        # print("New %s: Old %s" % (projectedState, state))
+        # print("old", (state > self.references).flatten() * 2 - 1)
+        # print("new", self.AlgorithmicConverter(projectedState, 0, 1))
+        # self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
+        self.memory[self.memory_Pointer, :] = self.AlgorithmicConverter(projectedState, 0, 1)
         self.memory_Pointer += 1
 
     def fun(self, t):
