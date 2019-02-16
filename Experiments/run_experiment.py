@@ -328,7 +328,6 @@ class ExperimentRunner():
         #   print(f'sum(B_{i}) = {sum(self.ctrlMixingMatrix[:,i])}')
         self.ctrl = system.Control(self.ctrlMixingMatrix, self.size)
 
-
     def log(self,message=""):
         timestamp = r'\d{2}/\d{2}/\d{4} [0-2][0-9]:[0-5][0-9]:[0-5][0-9]'
         regex = re.compile(timestamp)
