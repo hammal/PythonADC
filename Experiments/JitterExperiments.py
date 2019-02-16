@@ -818,7 +818,6 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
 
 
     c = np.eye(N*M)
-
     sys = system.System(A, c)
     
 
@@ -832,7 +831,6 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
                                                   'stateBoundInputs': (Ts*beta*kappa)/(1. - (Ts*beta/np.sqrt(M))),
                                                   'num_parallel_converters':M,
                                                   'noise': [{'std':sigma_sim_noise, 'steeringVector': beta*np.eye(N*M)[:,i]}  for i in range(N*M)]})   # /np.sqrt((N+1)*M)
-
 
     # sim_identity = simulator.Simulator(sys_identity, ctrl_identity, options={'stateBound': (Ts*beta*kappa)/(1. - Ts*beta)+1.,
                                                   # 'noise': [{'std':1., 'steeringVector': np.ones((K+1)*M)}]})
@@ -889,14 +887,7 @@ def piBlockSystem(M=1, N=1, L=1, eta2_magnitude=1e4, sigma_sim_noise=1e-5, sigma
         # plt.legend()
         # plt.show()
 
-    plt.figure()
-    [plt.semilogx(freq, 10*np.log10(np.abs(spec)), label="") for spec in spectrums]
-    plt.grid()
-    # [plt.semilogx([f,f], [-120, 0]) for f in frequencies]
-    plt.title("Block diagonal Pi System")
-
     return freq, spec
-
 
 
 
