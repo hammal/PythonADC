@@ -164,7 +164,7 @@ class Control(object):
         if memory.shape[0] == size:
             self.memory = memory
         else:
-            self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int8)
+            self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int64)
         self.size = size
         self.memory_Pointer = 0
 
