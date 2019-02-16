@@ -493,46 +493,39 @@ def main(experiment_id,
     # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
+    # s3_resource = boto3.resource('s3')
+    # s3_file_name_prefix = uuid.uuid4().hex[:6]
 
-    s3_resource = boto3.resource('s3')
-    s3_file_name_prefix = uuid.uuid4().hex[:6]
+    # runner.log("Saving results to S3")
+    # runner.log("S3 file name: \"{}\"".format(''.join([s3_file_name_prefix, experiment_id])))
+    runner.log(f'Saving results to "{DATA_STORAGE_PATH}"')
+    runner.saveAll()
+    with open(DATA_STORAGE_PATH / f'{experiment_id}_results.pkl', 'wb') as f:
+      pkl.dump(runner, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    runner.log("Saving results to S3")
-    runner.log("S3 file name: \"{}\"".format(''.join([s3_file_name_prefix, experiment_id])))
-    params = runner.getParams()
-    params_string = ''
-    for key in params.keys():
-      params_string = ''.join([params_string, f'{key}: {params[key]}\n'])
+    # uploadTos3(
+    #   s3_connection=s3_resource,
+    #   bucket_name=BUCKET_NAME,
+    #   file_name=''.join([s3_file_name_prefix,experiment_id,'_results.pkl']),
+    #   obj=runner)
 
-    uploadTos3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=''.join([s3_file_name_prefix,experiment_id,'_results.pkl']),
-      obj=runner)
+    # writeStringToS3(
+    #   s3_connection=s3_resource,
+    #   bucket_name=BUCKET_NAME,
+    #   file_name=f'{s3_file_name_prefix}{experiment_id}.log',
+    #   string=runner.logstr)
 
-    writeStringToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
-      string=runner.logstr)
+    # writeStringToS3(
+    #   s3_connection=s3_resource,
+    #   bucket_name=BUCKET_NAME,
+    #   file_name=f'{s3_file_name_prefix}{experiment_id}.params',
+    #   string=params_string)
 
-    writeStringToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      string=params_string)
-
-    writeStringToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.log',
-      string=runner.logstr)
-
-    writeCSVDataFrameToS3(
-      s3_connection=s3_resource,
-      bucket_name=BUCKET_NAME,
-      file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-      string=params_string)
+    # uploadTos3(
+    #   s3_connection=s3_resource,
+    #   bucket_name=BUCKET_NAME,
+    #   file_name=''.join([s3_file_name_prefix,experiment_id,'.params.pkl']),
+    #   obj=params)
 
 
 if __name__ == "__main__":

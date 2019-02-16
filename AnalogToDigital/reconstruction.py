@@ -9,7 +9,9 @@ from AnalogToDigital.system import Noise
 # import copy
 from scipy.integrate import odeint
 import scipy.optimize
+
 import matplotlib.pyplot as plt
+import time
 
 CHAIN_system = True
 
