@@ -209,6 +209,7 @@ class Control(object):
         else:
             self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
 
+
     def __getitem__(self, item):
         """
         this function is for retriving control decisions from memory at index k
