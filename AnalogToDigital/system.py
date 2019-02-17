@@ -245,6 +245,10 @@ class Control(object):
         bit = (vector > self.references).flatten() * 2 - 1
         newvector = 2 * vector - bit * self.bound
         code += 2 ** (self.bitsPerControl - bitNumber) * bit
+        # print("vector", vector)
+        # print("bit", bit)
+        # print("newvector", newvector)
+        # print("code", code)
         if bitNumber < self.bitsPerControl:
             return self.algorithmicConverter(newvector, code, bitNumber + 1)
         else:
@@ -263,6 +267,7 @@ class Control(object):
         # self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
         self.memory[self.memory_Pointer, :] = self.algorithmicConverter(projectedState, 0, 1)
         self.memory_Pointer += 1
+        # print("Done Updating Control\n\n")
 
     def fun(self, t):
         """

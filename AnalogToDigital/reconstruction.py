@@ -279,9 +279,12 @@ class WienerFilter(object):
                 self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
                 self.Ob = - np.dot(self.Bb, self.BackwardOffsetMatrix * control.references[0]).flatten()
             else:
-                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, control.references))
-                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, control.references))
-        
+                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, np.dot(control.mixingMatrix, control.references)))
+                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, np.dot(control.mixingMatrix, control.references)))
+            # else:
+            #     self.Of = np.zeros(self.order)
+            #     self.Ob = np.zeros(self.order)
+
             print("Offset Matrices:")
             print(self.Of, self.Ob)
 
@@ -312,7 +315,7 @@ class WienerFilter(object):
         if initialState:
             mf[:,0] = initialState
         else:
-            mf[:,0] = np.array(control[0])
+            mf[:,0] = np.array(np.dot(control.mixingMatrix, control[0]))
 
         print(control.size)
         for index in range(1, control.size):
