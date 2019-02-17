@@ -202,7 +202,13 @@ class Control(object):
         else:
             self.bitsPerControl = 1
         self.scale = 1./(2 ** self.bitsPerControl - 1)
-        normaliser = np.linalg.norm(self.mixingMatrix[0:options['M'],0], ord=2, axis=0)
+
+        if not 'M' in options.keys():
+            M = 1
+        else:
+            M = options['M']
+
+        normaliser = np.linalg.norm(self.mixingMatrix[0:M,0], ord=2, axis=0)
         self.projectionMatrix = np.dot(self.mixingMatrix, np.diag(1/(np.array([normaliser]*self.mixingMatrix.shape[1])))).transpose()
         # print("Control projection matrix:")
         # print(self.projectionMatrix)
