@@ -556,7 +556,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("-phi", "--input_phase", required=True, type=float)
     arg_parser.add_argument("-sigma2_thermal", required=True, type=float)
     arg_parser.add_argument("-sigma2_reconst", required=True, type=float)
-
+    arg_parser.add_argument("-c","--controller", type=str)
+    arg_parser.add_argument("-bpc","--bitsPerControl", type=int)
 
     # Optional arguments, things that could change later
     # or are currently set to some fixed value
