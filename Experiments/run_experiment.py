@@ -506,7 +506,9 @@ def main(experiment_id,
          kappa=1,
          sigma2_thermal=1e-6,
          sigma2_reconst=1e-6,
-         num_periods_in_simulation=20):
+         num_periods_in_simulation=20,
+         controller='multiBitController',
+         bitsPerControl=1):
     
       
     runner = ExperimentRunner(experiment_id,
@@ -526,7 +528,9 @@ def main(experiment_id,
                               kappa,
                               sigma2_thermal,
                               sigma2_reconst,
-                              num_periods_in_simulation)
+                              num_periods_in_simulation,
+                              controller='multiBitController',
+                              bitsPerControl=1)
 
     # runner.unitTest()
     runner.run_simulation()
@@ -573,7 +577,7 @@ if __name__ == "__main__":
 
         # Required arguments
     arg_parser.add_argument("-id", "--experiment_id", required=True, type=str)
-    arg_parser.add_argument("-d", "--data_dir", required=True, type=str)
+    arg_parser.add_argument("-d", "--data_dir", type=str)
     arg_parser.add_argument("-M", required=True, type=int)
     arg_parser.add_argument("-N", required=True, type=int)
     arg_parser.add_argument("-L", required=True, type=int)
