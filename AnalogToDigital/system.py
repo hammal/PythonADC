@@ -202,8 +202,10 @@ class Control(object):
         else:
             self.bitsPerControl = 1
         self.scale = 1./(2 ** self.bitsPerControl - 1)
-        self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
-
+        normaliser = np.linalg.norm(self.mixingMatrix[0:options['M'],0], ord=2, axis=0)
+        self.projectionMatrix = np.dot(self.mixingMatrix, np.diag(1/(np.array([normaliser]*self.mixingMatrix.shape[1])))).transpose()
+        # print("Control projection matrix:")
+        # print(self.projectionMatrix)
     def __getitem__(self, item):
         """
         this function is for retriving control decisions from memory at index k
@@ -240,6 +242,10 @@ class Control(object):
         bit = (vector > self.references).flatten() * 2 - 1
         newvector = 2 * vector - bit * self.bound
         code += 2 ** (self.bitsPerControl - bitNumber) * bit
+        # print("vector", vector)
+        # print("bit", bit)
+        # print("newvector", newvector)
+        # print("code", code)
         if bitNumber < self.bitsPerControl:
             return self.AlgorithmicConverter(newvector, code, bitNumber + 1)
         else:
@@ -256,8 +262,10 @@ class Control(object):
         # print("old", (state > self.references).flatten() * 2 - 1)
         # print("new", self.AlgorithmicConverter(projectedState, 0, 1))
         # self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
+        # print("Start Update Control")
         self.memory[self.memory_Pointer, :] = self.AlgorithmicConverter(projectedState, 0, 1)
         self.memory_Pointer += 1
+        # print("Done Updating Control\n\n")
 
     def fun(self, t):
         """
