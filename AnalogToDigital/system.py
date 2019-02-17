@@ -202,7 +202,12 @@ class Control(object):
         else:
             self.bitsPerControl = 1
         self.scale = 1./(2 ** self.bitsPerControl - 1)
-        self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
+
+        # Check if a projection matrix is given otherwise default to a normalized version of mixingMatrix
+        if 'projectionMatrix' in options:
+            self.projectionMatrix = options['projectionMatrix']
+        else:
+            self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
 
     def __getitem__(self, item):
         """
@@ -235,13 +240,13 @@ class Control(object):
         """
         return np.unpackbits(np.array([value], dtype=np.uint8))[self.leftpadd:]
 
-    def AlgorithmicConverter(self, vector, code, bitNumber):
+    def algorithmicConverter(self, vector, code, bitNumber):
         # print(vector, code, bitNumber)
         bit = (vector > self.references).flatten() * 2 - 1
         newvector = 2 * vector - bit * self.bound
         code += 2 ** (self.bitsPerControl - bitNumber) * bit
         if bitNumber < self.bitsPerControl:
-            return self.AlgorithmicConverter(newvector, code, bitNumber + 1)
+            return self.algorithmicConverter(newvector, code, bitNumber + 1)
         else:
             return code 
         
@@ -254,9 +259,9 @@ class Control(object):
         projectedState = -np.dot(self.projectionMatrix, state)
         # print("New %s: Old %s" % (projectedState, state))
         # print("old", (state > self.references).flatten() * 2 - 1)
-        # print("new", self.AlgorithmicConverter(projectedState, 0, 1))
+        # print("new", self.algorithmicConverter(projectedState, 0, 1))
         # self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
-        self.memory[self.memory_Pointer, :] = self.AlgorithmicConverter(projectedState, 0, 1)
+        self.memory[self.memory_Pointer, :] = self.algorithmicConverter(projectedState, 0, 1)
         self.memory_Pointer += 1
 
     def fun(self, t):
