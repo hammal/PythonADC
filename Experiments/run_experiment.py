@@ -28,8 +28,8 @@ import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 
 BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
-# DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
-DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
+DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
+# DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
 
 
 def hadamardMatrix(n):
@@ -89,7 +89,9 @@ class ExperimentRunner():
                  kappa=1,
                  sigma2_thermal=1e-6,
                  sigma2_reconst=1e-6,
-                 num_periods_in_simulation=100):
+                 num_periods_in_simulation=100,
+                 controller='multiBitController',
+                 bitsPerControl=1):
 
         #print("Initializing Experiment")
         self.experiment_id = experiment_id
@@ -142,7 +144,7 @@ class ExperimentRunner():
                 # only one input signal => We scale up the input vector by sqrt(M)
                 if L == 1:
                     for k in range(N-1):
-                        mixingPi[k] = beta * np.sqrt(M) * (np.outer(H[:,0],H[:,0])) + beta * np.sqrt(M) * sum(np.outer(H[:,i],H[:,i]) for i in range(1,self.M)) * 1e-3
+                        mixingPi[k] = beta * np.sqrt(M) * (np.outer(H[:,0],H[:,0]))# + beta * np.sqrt(M) * sum(np.outer(H[:,i],H[:,i]) for i in range(1,self.M)) * 1e-3
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 # L=M means M input signals
                 elif L == M:
@@ -170,25 +172,20 @@ class ExperimentRunner():
                 self.all_input_signal_frequencies[i] = allowed_signal_frequencies[k]
                 self.all_input_signal_amplitudes[i] = input_amplitude
 
-            # M x L selector matrix for the b-vectors
-            # if L == 2:
-            #   selectorMatrix = (np.array([
-            #                         [1, 0],
-            #                         [0, 1],
-            #                         [1, 0],
-            #                         [0, 1]
-            #                               ]))
+            if L == 2:
+              # The outer product sum results in a checkerboard matrix with 1/0 entries.
+              # We pick input vectors from there and scale up by M (undoing the attenuation from the outer products)
+              inputVectorMatrix = beta * (M/2) * ( np.outer(H[:,0],H[:,0]) + np.outer(H[:,1],H[:,1]) ) * 2
             if L == M:
-              inputVectorMatrix = np.eye(M)/np.sqrt(M)
+              inputVectorMatrix = beta * np.eye(M)
             elif L == 1:
-              inputVectorMatrix = H
+              inputVectorMatrix = beta * np.sqrt(M) * H
 
             # uPi,sPi,vhPi = np.linalg.svd(mixingPi[0])
             # vhPi[np.abs(vhPi) < 1e-16] = 0
             for i in range(self.L):
                 vector = np.zeros(self.M*self.N)
-                # Scale the input vector up by sqrt(number of channels per signal)
-                vector[0:self.M] =  beta * np.sqrt(M) * inputVectorMatrix[:,i] # self.beta * np.sqrt(M/L) * vhPi[i]
+                vector[0:self.M] = inputVectorMatrix[:,i]
                 self.input_signals.append(system.Sin(self.sampling_period,
                                                      amplitude=self.all_input_signal_amplitudes[i],
                                                      frequency=self.all_input_signal_frequencies[i],
@@ -244,7 +241,7 @@ class ExperimentRunner():
         else:
             raise NotImplemented
 
-        pd.DataFrame(self.A).to_csv('A_matrix.csv')
+        # pd.DataFrame(self.A).to_csv('A_matrix.csv')
         
         
         #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
@@ -257,12 +254,24 @@ class ExperimentRunner():
         self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
         print("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
 
-        diagonalControl = True
-        dither = True
+        diagonalControl = False
+        dither = False
         blockDiagonalControl = False
         blockDiagonalControl_with_DiagonalPart_and_Dither = False
+        
+        """
+          The multi-bit controller is only implemented for L=1 signal right now.
+        """
+        if controller == 'multiBitController':
+            if L>1:
+              raise "Multi-Bit controller not implemented for L>1 input signals"
 
-        self.ctrlMixingMatrix = np.zeros((N*M , N*M))
+            self.ctrlMixingMatrix = (np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3
+            for i in range(N):
+              self.ctrlMixingMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * H[:,0]
+            # print(self.ctrlMixingMatrix)
+        else:
+            diagonalControl = True
 
         if diagonalControl:
             self.ctrlMixingMatrix = - self.kappa * self.beta * np.eye(self.N * self.M)
@@ -286,8 +295,6 @@ class ExperimentRunner():
             self.ctrlMixingMatrix[k * self.M: (k+1) * self.M,
                                   k * self.M:(k+1) * self.M] = (-self.beta
                                                                 * np.outer(H[:,0],H[:,0]))
-        else:
-          raise NotImplemented
 
         if dither:
           self.ctrlMixingMatrix += (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * beta  * 1e1 / (self.M*self.N)**2
@@ -297,7 +304,12 @@ class ExperimentRunner():
         # print(f'beta*sqrt(M) = {self.beta*np.sqrt(M)}')
         # for i in range(N*M):
         #   print(f'sum(B_{i}) = {sum(self.ctrlMixingMatrix[:,i])}')
-        self.ctrl = system.Control(self.ctrlMixingMatrix, self.size)
+        self.ctrlOptions = {
+            'bitsPerControl':bitsPerControl,
+            'bound':1,
+            'M':self.M
+        }
+        self.ctrl = system.Control(self.ctrlMixingMatrix, self.size, options=self.ctrlOptions)
 
     def log(self,message=""):
         timestamp = r'\d{2}/\d{2}/\d{4} [0-2][0-9]:[0-5][0-9]:[0-5][0-9]'
@@ -375,7 +387,7 @@ class ExperimentRunner():
                                    'num_parallel_converters': self.M,
                                    'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]}
         
-        initalState = np.random.rand(self.N*self.M)*1e-3
+        initalState = (2*np.random.rand(self.N*self.M) - np.ones(self.N*self.M))*1e-3
         # for k in range(self.N):
         #   initalState[k*self.M:self.M*(k+1)] = np.ones(self.M) * np.random.randint(2) * 2. - 1.
         sim = simulator.Simulator(self.sys, self.ctrl, options=self.simulation_options, initalState=initalState)
@@ -429,7 +441,7 @@ class ExperimentRunner():
         print()
 
 
-        print(self.logstr)
+        # print(self.logstr)
 
     def getParams(self):
         input_steering_vectors = {f'b_{i}': self.input_signals[i].steeringVector for i in range(self.L)}
