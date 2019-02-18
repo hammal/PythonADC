@@ -266,7 +266,7 @@ class ExperimentRunner():
             if L>1:
               raise "Multi-Bit controller not implemented for L>1 input signals"
 
-            self.ctrlMixingMatrix = (np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3
+            self.ctrlMixingMatrix = np.zeros((N*M,N))#(np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3
             for i in range(N):
               self.ctrlMixingMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * H[:,0]
             # print(self.ctrlMixingMatrix)
@@ -503,8 +503,8 @@ def main(experiment_id,
                               sigma2_thermal,
                               sigma2_reconst,
                               num_periods_in_simulation,
-                              controller='multiBitController',
-                              bitsPerControl=1)
+                              controller,
+                              bitsPerControl)
 
     # runner.unitTest()
     runner.run_simulation()
