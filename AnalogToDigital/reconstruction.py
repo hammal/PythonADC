@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 CHAIN_system = True
 
 def bruteForceCare(A, B, Q, R):
+    timelimit = 10*60
+    start_time = time.time()
     # Initialize V_frw:
     V = np.eye(A.shape[0])
     V_tmp = np.zeros_like(V)
@@ -21,6 +23,8 @@ def bruteForceCare(A, B, Q, R):
     RInv = np.linalg.inv(R)
 
     while not np.allclose(V,V_tmp, rtol=1e-5, atol=1e-8):
+        if time.time() - start_time > timelimit:
+            raise Exception("Brute Force CARE solver ran out of time")
         V_tmp = V
         try:
             V = V + tau * (np.dot(A,V) + np.transpose(np.dot(A,V)) + Q - np.dot(V, np.dot(B, np.dot(RInv, np.dot(B.transpose(), V)))))
