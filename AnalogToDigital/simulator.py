@@ -170,8 +170,11 @@ class Simulator(object):
             self.control.update(self.state)
 
             # Print progress every 1e4 samples
-            if current_sample % (num_samples//1e4) == 0:
-                print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+            try:
+                if current_sample % (num_samples//1e4) == 0:
+                    print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+            except ZeroDivisionError:
+                pass
 
         # Return simulation object
         return {
