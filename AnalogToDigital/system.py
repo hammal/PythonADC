@@ -207,7 +207,7 @@ class Control(object):
         if 'projectionMatrix' in options:
             self.projectionMatrix = options['projectionMatrix']
         else:
-            self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
+            self.projectionMatrix = np.dot(self.mixingMatrix, np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0)))).transpose()
 
 
     def __getitem__(self, item):
