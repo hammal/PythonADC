@@ -118,6 +118,7 @@ class ExperimentRunner():
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
 
         self.logstr = ("{0}: EXPERIMENT LOG\n{0}: Experiment ID: {1}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), experiment_id))
+
         self.finished_simulation = False
         self.finished_reconstruction = False
         if not self.data_dir.exists():
@@ -200,6 +201,7 @@ class ExperimentRunner():
             mixingPi = np.zeros((self.N, self.M, self.M))
             H = hadamardMatrix(self.M)
             
+
             self.all_input_signal_frequencies = np.zeros(L)
             self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
             self.all_input_signal_amplitudes[self.primary_signal_dimension] = self.input_amplitude
@@ -238,42 +240,8 @@ class ExperimentRunner():
         else:
             raise NotImplemented
 
-        # Define input signals:
-        self.input_signals = []
-        self.all_input_signal_frequencies = np.zeros(L)
-        self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
-        allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(2,3*M))
-        for i in range(self.L):
-            if i == self.primary_signal_dimension: continue
-            k = np.random.randint(0,L-1)
-            self.all_input_signal_frequencies[i] = allowed_signal_frequencies[k]
-            self.all_input_signal_amplitudes[i] = input_amplitude
-
-        # M x L selector matrix for the b-vectors
-        if L == 2:
-          selectorMatrix = ((1./np.sqrt(2)) * np.array([
-                                [1, 0],
-                                [0, 1],
-                                [1, 0],
-                                [0, 1]
-                                      ]))
-        elif L == M or L == 1:
-          selectorMatrix = np.eye(M)
-
-        # uPi,sPi,vhPi = np.linalg.svd(mixingPi[0])
-        # vhPi[np.abs(vhPi) < 1e-16] = 0
-        for i in range(self.L):
-            vector = np.zeros(self.M*self.N)
-            # Scale the input vector up by sqrt(number of channels per signal)
-            vector[0:self.M] =  np.dot(mixingPi[0], selectorMatrix[:,i]) * np.sqrt(M/L) # self.beta * np.sqrt(M/L) * vhPi[i]
-            self.input_signals.append(system.Sin(self.sampling_period,
-                                                 amplitude=self.all_input_signal_amplitudes[i],
-                                                 frequency=self.all_input_signal_frequencies[i],
-                                                 phase=self.input_phase,
-                                                 steeringVector=vector))
-            print(f'b_{i} = {self.input_signals[i].steeringVector}')
-        self.input_signals = tuple(self.input_signals)
-        #print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
+        # pd.DataFrame(self.A).to_csv('A_matrix.csv')
+        # print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
 
         self.c = np.eye(self.N * self.M)
         self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
@@ -535,7 +503,6 @@ def main(experiment_id,
     # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
-
     # s3_resource = boto3.resource('s3')
     # s3_file_name_prefix = uuid.uuid4().hex[:6]
 

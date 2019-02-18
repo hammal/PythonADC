@@ -940,6 +940,7 @@ def plainVanilla():
     plt.grid()
     plt.show()
 
+
 if __name__ == "__main__":
     # arg_parser = argparse.ArgumentParser(description="")
     # arg_parser.add_argument("--jitterAsGaussianNoise", type=bool, default=False)
@@ -985,7 +986,3 @@ if __name__ == "__main__":
     
     # plt.grid()
     # plt.legend()
-    # multipleInputExperiment()
-    # randomWalkPlusSinusoid()
-
-    # main(**args)
