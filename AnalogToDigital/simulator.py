@@ -8,6 +8,7 @@ from scipy.optimize import minimize
 from scipy.integrate import odeint
 import sdeint
 import time
+import sys
 
 
 class Simulator(object):
@@ -52,6 +53,7 @@ class Simulator(object):
         index = 0
         tnew = t
         current_sample = 0
+        num_samples = len(t)
 
         if 'jitter' in self.options:
             jitter_range = self.options['jitter']['range']
@@ -151,6 +153,10 @@ class Simulator(object):
             # print(self.state)
             current_sample += 1
             self.control.update(self.state)
+
+            # Print progress every 1e4 samples
+            if current_sample % (num_samples//1e4) == 0:
+                print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
 
         # Return simulation object
         return {
