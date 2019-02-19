@@ -28,8 +28,8 @@ import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 
 BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
-DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
-# DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
+# DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
+DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
 
 
 def hadamardMatrix(n):
@@ -263,7 +263,7 @@ class ExperimentRunner():
             if L>1:
               raise "Multi-Bit controller not implemented for L>1 input signals"
 
-            self.ctrlMixingMatrix = np.zeros((N*M,N))#(np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3
+            self.ctrlMixingMatrix = (np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3 # np.zeros((N*M,N))#
             for i in range(N):
               self.ctrlMixingMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * H[:,0]
             # print(self.ctrlMixingMatrix)
@@ -307,6 +307,7 @@ class ExperimentRunner():
             'M':self.M
         }
         self.ctrl = system.Control(self.ctrlMixingMatrix, self.size, options=self.ctrlOptions)
+
 
     def log(self,message=""):
         timestamp = r'\d{2}/\d{2}/\d{4} [0-2][0-9]:[0-5][0-9]:[0-5][0-9]'
@@ -458,47 +459,45 @@ class ExperimentRunner():
 
 
 def main(experiment_id,
-         data_dir,
          M, 
          N,
          L,
-         input_phase,
          input_amplitude,
          input_frequency=None,
          beta=6250,
          sampling_period=8e-5,
-         primary_signal_dimension=1,
+         primary_signal_dimension=0,
          systemtype='ParallelIntegratorChain',
          OSR=16,
          eta2_magnitude=1,
          kappa=1,
          sigma2_thermal=1e-6,
          sigma2_reconst=1e-6,
+         input_phase=0,
          num_periods_in_simulation=20,
          controller='multiBitController',
          bitsPerControl=1):
     
-      
-    runner = ExperimentRunner(experiment_id,
-                              DATA_STORAGE_PATH,
-                              M,
-                              N,
-                              L,
-                              input_phase,
-                              input_amplitude,
-                              input_frequency,
-                              beta,
-                              sampling_period,
-                              primary_signal_dimension,
-                              systemtype,
-                              OSR,
-                              eta2_magnitude,
-                              kappa,
-                              sigma2_thermal,
-                              sigma2_reconst,
-                              num_periods_in_simulation,
-                              controller,
-                              bitsPerControl)
+    
+    runner = ExperimentRunner(experiment_id=experiment_id,
+                              data_dir=DATA_STORAGE_PATH,
+                              M=M,
+                              N=N,
+                              L=L,
+                              input_phase=input_phase,
+                              input_amplitude=input_amplitude,
+                              input_frequency=input_frequency,
+                              beta=beta,
+                              sampling_period=sampling_period,
+                              primary_signal_dimension=primary_signal_dimension,
+                              systemtype=systemtype,
+                              OSR=OSR,
+                              kappa=kappa,
+                              sigma2_thermal=sigma2_thermal,
+                              sigma2_reconst=sigma2_reconst,
+                              num_periods_in_simulation=num_periods_in_simulation,
+                              controller=controller,
+                              bitsPerControl=bitsPerControl)
 
     # runner.unitTest()
     runner.run_simulation()
@@ -544,14 +543,14 @@ if __name__ == "__main__":
 
         # Required arguments
     arg_parser.add_argument("-id", "--experiment_id", required=True, type=str)
-    arg_parser.add_argument("-d", "--data_dir", type=str)
+    # arg_parser.add_argument("-d", "--data_dir", type=str)
     arg_parser.add_argument("-M", required=True, type=int)
     arg_parser.add_argument("-N", required=True, type=int)
     arg_parser.add_argument("-L", required=True, type=int)
     arg_parser.add_argument("-beta", required=True, type=int)
     arg_parser.add_argument("-Ts", "--sampling_period", required=True, type=float)
     arg_parser.add_argument("-Ax", "--input_amplitude", required=True,  type=float)
-    arg_parser.add_argument("-phi", "--input_phase", required=True, type=float)
+    # arg_parser.add_argument("-phi", "--input_phase", required=True, type=float)
     arg_parser.add_argument("-sigma2_thermal", required=True, type=float)
     arg_parser.add_argument("-sigma2_reconst", required=True, type=float)
     arg_parser.add_argument("-c","--controller", type=str)
@@ -559,13 +558,13 @@ if __name__ == "__main__":
 
     # Optional arguments, things that could change later
     # or are currently set to some fixed value
-    arg_parser.add_argument("-f_sig", "--input_frequency", type=float, default=None)
-    arg_parser.add_argument("-eta2", "--eta2_magnitude", type=float, default=1)
-    arg_parser.add_argument("-kappa", type=float, default=1)
-    arg_parser.add_argument("-OSR", type=int, default=16)
-    arg_parser.add_argument("-systemtype", type=str, default="ParallelIntegratorChain")
-    arg_parser.add_argument("-sig_dim", "--primary_signal_dimension", type=int, default=0)
-    arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int, default=20)
+    # arg_parser.add_argument("-f_sig", "--input_frequency", type=float, default=None)
+    # arg_parser.add_argument("-eta2", "--eta2_magnitude", type=float, default=1)
+    # arg_parser.add_argument("-kappa", type=float, default=1)
+    # arg_parser.add_argument("-OSR", type=int, default=16)
+    # arg_parser.add_argument("-systemtype", type=str, default="ParallelIntegratorChain")
+    # arg_parser.add_argument("-sig_dim", "--primary_signal_dimension", type=int, default=0)
+    arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int)#, default=20)
 
     args = vars(arg_parser.parse_args())
 
