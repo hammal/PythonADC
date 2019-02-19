@@ -113,6 +113,9 @@ class ExperimentRunner():
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
 
+        self.controller = controller
+        self.bitsPerControl = bitsPerControl
+
         self.border = np.int(self.size //100)
         self.all_input_signal_amplitudes = np.zeros(L)
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
@@ -159,6 +162,13 @@ class ExperimentRunner():
                 print("A = {}".format(self.A))
             else:
               mixingPi = [np.zeros((M,M))]
+
+            # Limit the low frequency gain of the filter
+            # at approximately the thermal noise level
+            LeakyIntegrators = True
+            if LeakyIntegrators == True:
+              self.rho = beta/((sigma2_thermal)**(-1.2/N))
+              self.A -= np.eye(N*M)*self.rho
 
             # Define input signals:
             self.input_signals = []
@@ -454,7 +464,9 @@ class ExperimentRunner():
                   'num_oob': self.result['num_oob'],
                   'oob_rate': self.result['num_oob'] / self.size,
                   'sigma2_thermal': self.sigma2_thermal,
-                  'sigma2_reconst': self.sigma2_reconst}
+                  'sigma2_reconst': self.sigma2_reconst,
+                  'bpc': self.bitsPerControl,
+                  'controller': self.controller}
         return {**params, **input_steering_vectors}
 
 
