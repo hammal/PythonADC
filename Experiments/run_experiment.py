@@ -28,8 +28,8 @@ import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 
 BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
-# DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
-DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
+DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
+# DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
 
 
 def hadamardMatrix(n):
