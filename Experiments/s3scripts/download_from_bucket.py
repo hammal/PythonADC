@@ -1,15 +1,10 @@
 import boto3
 import uuid
 import argparse
+from s3utils import downloadFromS3
 
 
 BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
-
-
-def downloadFromS3(s3_connection, bucket_name, file_name, destination):
-    (s3_connection
-        .Object(bucket_name, file_name)
-        .download_file(f'{destination}/{file_name}'))
 
 
 def main(file_name, destination):

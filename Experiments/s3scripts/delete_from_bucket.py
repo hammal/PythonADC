@@ -1,12 +1,8 @@
 import boto3
 import argparse
+from s3utils import delete_s3_obj
 
 BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
-
-
-def delete_s3_obj(bucket_name, s3_connection, filename):
-    obj = s3_connection.Object(bucket_name, filename)
-    obj.delete()
 
 
 def main(filename):
