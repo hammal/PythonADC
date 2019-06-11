@@ -16,9 +16,6 @@ import os
 import re
 import io
 
-import boto3
-import uuid
-
 ###############################
 #         ADC Packages        #
 ###############################
@@ -27,45 +24,13 @@ import AnalogToDigital.simulator as simulator
 import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 
-BUCKET_NAME = 'paralleladcexperiments5b70cd4e-74d3-4496-96fa-f4025220d48c'
+
+# Edit this path
 DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
-# DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data')
 
 
 def hadamardMatrix(n):
     return sp.linalg.hadamard(n)/np.sqrt(n)
-
-
-def create_s3_filename(file_name):
-    return ''.join([str(uuid.uuid4().hex[:6]), file_name])
-
-
-def writeCSVDataFrameToS3(s3_connection, bucket_name, file_name, df):
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    (s3_connection
-      .Object(bucket_name, file_name)
-      .put(Body=csv_buffer.getvalue()))
-    string_buffer.close()
-
-
-def writeStringToS3(s3_connection, bucket_name, file_name, string):
-    string_buffer = io.StringIO()
-    string_buffer.write(string)
-    (s3_connection
-      .Object(bucket_name, file_name)
-      .put(Body=string_buffer.getvalue()))
-    string_buffer.close()
-
-
-def uploadTos3(s3_connection, bucket_name, file_name, obj):
-    pickle_buffer = io.BytesIO()
-    pkl.dump(obj, pickle_buffer)
-    (s3_connection
-      .Object(bucket_name, file_name)
-      .put(Body=pickle_buffer.getvalue()))
-    pickle_buffer.close()
-
 
 
 class ExperimentRunner():
@@ -90,10 +55,10 @@ class ExperimentRunner():
                  sigma2_thermal=1e-6,
                  sigma2_reconst=1e-6,
                  num_periods_in_simulation=100,
-                 controller='multiBitController',
+                 controller='subspaceController',
                  bitsPerControl=1):
 
-        #print("Initializing Experiment")
+        print("Initializing Experiment | ID: %s" %experiment_id)
         self.experiment_id = experiment_id
         self.data_dir = Path(data_dir)
         self.M = M
@@ -127,14 +92,17 @@ class ExperimentRunner():
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True)
 
+        #################################################
+        #     System and input signal specifications    #
+        #################################################
+
         if self.primary_signal_dimension > self.M:
             self.log("Primary Signal Dimension cannot be larger than M, setting to 0 (first dim)")
             self.primary_signal_dimension = 0
 
         if self.input_frequency == None:
-            self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)# + np.random.randn()
+            self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
             self.log(f'Setting f_sig = f_s/(2*OSR) = {self.input_frequency}')
-
 
         if self.systemtype == "ParallelIntegratorChain":
 
@@ -152,7 +120,7 @@ class ExperimentRunner():
                 # L=M means M input signals
                 elif L == M:
                     for k in range(N-1):
-                        mixingPi[k] = self.beta * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
+                        mixingPi[k] = self.beta * np.sqrt(M) * np.eye(M) #(sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 else:
                     for k in range(N-1):
@@ -167,43 +135,42 @@ class ExperimentRunner():
             # at approximately the thermal noise level
             LeakyIntegrators = True
             if LeakyIntegrators == True:
-              self.rho = beta/((sigma2_thermal)**(-1.2/N))
+              self.rho = beta/((sigma2_thermal)**(-1/N))
               self.A -= np.eye(N*M)*self.rho
 
             # Define input signals:
             self.input_signals = []
             self.all_input_signal_frequencies = np.zeros(L)
             self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
-            allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(2,3*M))
+            allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(1,3*M))
             for i in range(self.L):
                 if i == self.primary_signal_dimension: continue
                 k = np.random.randint(0,L-1)
-                self.all_input_signal_frequencies[i] = allowed_signal_frequencies[k]
+                self.all_input_signal_frequencies[i] = allowed_signal_frequencies[i]
                 self.all_input_signal_amplitudes[i] = input_amplitude
 
-            if L == 2:
+            # Define input steeringVectors
+            if L == 1:
+              inputVectorMatrix = beta * np.sqrt(M) * H
+            elif L == 2:
               # The outer product sum results in a checkerboard matrix with 1/0 entries.
               # We pick input vectors from there and scale up by M (undoing the attenuation from the outer products)
               inputVectorMatrix = beta * (M/2) * ( np.outer(H[:,0],H[:,0]) + np.outer(H[:,1],H[:,1]) ) * 2
-            if L == M:
-              inputVectorMatrix = beta * np.eye(M)
-            elif L == 1:
-              inputVectorMatrix = beta * np.sqrt(M) * H
+            elif L == M:
+              inputVectorMatrix = beta * np.sqrt(M) * (np.hstack( (np.outer(H[:,i],H[:,i])[:,0].reshape(-1,1) for i in range(L)) ))
+            else:
+              inputVectorMatrix = beta * np.sqrt(M/L) * H
 
-            # uPi,sPi,vhPi = np.linalg.svd(mixingPi[0])
-            # vhPi[np.abs(vhPi) < 1e-16] = 0
             for i in range(self.L):
                 vector = np.zeros(self.M*self.N)
                 vector[0:self.M] = inputVectorMatrix[:,i]
                 self.input_signals.append(system.Sin(self.sampling_period,
                                                      amplitude=self.all_input_signal_amplitudes[i],
                                                      frequency=self.all_input_signal_frequencies[i],
-                                                     phase=self.input_phase,
+                                                     phase=self.input_phase,#+ (np.pi/2)*i,
                                                      steeringVector=vector))
                 print(f'b_{i} = {self.input_signals[i].steeringVector}')
             self.input_signals = tuple(self.input_signals)
-
-
 
         elif self.systemtype == "CyclicIntegratorChain":
 
@@ -261,62 +228,49 @@ class ExperimentRunner():
         self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
         print("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
 
-        diagonalControl = False
-        dither = False
-        blockDiagonalControl = False
-        blockDiagonalControl_with_DiagonalPart_and_Dither = False
-        
-        """
-          The multi-bit controller is only implemented for L=1 signal right now.
-        """
-        if controller == 'multiBitController':
-            if L>1:
-              raise "Multi-Bit controller not implemented for L>1 input signals"
 
-            self.ctrlMixingMatrix = (np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3 # np.zeros((N*M,N))#
+        #################################################
+        #           Controller specification            #
+        #################################################
+        dither = True
+        """
+          The subspace controller is only implemented for L=1 signal right now.
+        """
+        if controller == 'subspaceController':
+          self.ctrlMixingMatrix = np.zeros((self.N*self.M, self.N))
+          # if L>1:
+          #   raise "Multi-Bit controller not implemented for L>1 input signals"
+          if dither:
+            self.ctrlMixingMatrix =  (np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3
+
+          if L==1:
             for i in range(N):
               self.ctrlMixingMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * H[:,0]
-            # print(self.ctrlMixingMatrix)
-        else:
-            diagonalControl = True
+          else:
+            raise NotImplemented
+            # self.ctrlMixingMatrix = np.zeros((N*M,N*M))
+            # for i in range(N):
+            #   self.ctrlMixingMatrix[i*M:(i+1)*M,i*M:(i+1)*M] = -np.sqrt(self.M) *  self.beta * H # 
 
-        if diagonalControl:
-            self.ctrlMixingMatrix = - self.kappa * self.beta * np.eye(self.N * self.M)
+        elif controller == 'diagonalController':
+            self.ctrlMixingMatrix = np.zeros((N*M,N*M))
+            if dither:
+              self.ctrlMixingMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * beta*0.05  / (self.M*self.N)
+            self.ctrlMixingMatrix += - self.kappa * self.beta * np.sqrt(M) * np.eye(self.N * self.M)
 
-        elif blockDiagonalControl_with_DiagonalPart_and_Dither:
-          lambd = 0.5
-          self.ctrlMixingMatrix = ((np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) 
-                                    * beta  * 0*1e-3 / (self.M**2 * (self.N**2 - self.N)))
+        # elif controller == 'blockDiagonalController:
+        #   for k in range(N):
+        #     self.ctrlMixingMatrix[k * self.M: (k+1) * self.M,
+        #                           k * self.M:(k+1) * self.M] = (-self.beta
+        #                                                         * np.outer(H[:,0],H[:,0]))
 
-          for k in range(N):
-            self.ctrlMixingMatrix[k * self.M: (k+1) * self.M,
-                                  k * self.M:(k+1) * self.M] = - beta*(np.sqrt(M) ** (k))*np.outer(H[:,0],H[:,0])
-                                    # ((1.-lambd) * self.beta / ((M-1))
-                                    #                              * (np.ones((M,M)) - np.eye(M))
-                                    #                              + lambd * self.beta
-                                    #                              * np.eye(self.M))
-
-        elif blockDiagonalControl:
-          # scaling = 
-          for k in range(N):
-            self.ctrlMixingMatrix[k * self.M: (k+1) * self.M,
-                                  k * self.M:(k+1) * self.M] = (-self.beta
-                                                                * np.outer(H[:,0],H[:,0]))
-
-        if dither:
-          self.ctrlMixingMatrix += (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * beta  * 1e1 / (self.M*self.N)**2
-
-        # print("######################")
-        # print("######################\n")
-        # print(f'beta*sqrt(M) = {self.beta*np.sqrt(M)}')
-        # for i in range(N*M):
-        #   print(f'sum(B_{i}) = {sum(self.ctrlMixingMatrix[:,i])}')
         self.ctrlOptions = {
             'bitsPerControl':bitsPerControl,
             'bound':1,
-            'M':self.M
         }
         self.ctrl = system.Control(self.ctrlMixingMatrix, self.size, options=self.ctrlOptions)
+
+        print("ctrlMixingMatrix: %s\n" % (self.ctrlMixingMatrix,))
 
 
     def log(self,message=""):
@@ -334,35 +288,35 @@ class ExperimentRunner():
             outfile.write(self.logstr)
 
 
-    def saveSimulation(self):
-        # Save simulation results, dictionary with:
-        #     't': time sequence
-        #     'control': control object (control[:] holds the values of the s_k(t) signals)
-        #     'output': time domain state values
-        #     'system': A,c matrices
-        #     'state': value of last state (unnecessary)
-        #     'options': options dictionary passed to the simulator
-        sim_file_path = self.data_dir / 'result_obj.pkl'
-        with sim_file_path.open(mode='wb') as outfile:
-            pkl.dump(self.result, outfile)
-        self.log("Simulation file saved at {}".format(sim_file_path))
+    # def saveSimulation(self):
+    #     # Save simulation results, dictionary with:
+    #     #     't': time sequence
+    #     #     'control': control object (control[:] holds the values of the s_k(t) signals)
+    #     #     'output': time domain state values
+    #     #     'system': A,c matrices
+    #     #     'state': value of last state (unnecessary)
+    #     #     'options': options dictionary passed to the simulator
+    #     sim_file_path = self.data_dir / 'result_obj.pkl'
+    #     with sim_file_path.open(mode='wb') as outfile:
+    #         pkl.dump(self.result, outfile)
+    #     self.log("Simulation file saved at {}".format(sim_file_path))
 
 
-    def saveInputSignals(self):
-        # Save input signals used in the simulation.
-        #   Load with: input_signals = pkl.load('input_signals.pkl')
-        #   Primary Signal is then: input_signals[primary_signal_dimension]
-        inputs_file_path = self.data_dir / 'input_signals.pkl'
-        with inputs_file_path.open(mode='wb') as outfile:
-            pkl.dump(self.input_signals, outfile)
-        self.log("Input signals saved at \"{}\"".format(inputs_file_path))
+    # def saveInputSignals(self):
+    #     # Save input signals used in the simulation.
+    #     #   Load with: input_signals = pkl.load('input_signals.pkl')
+    #     #   Primary Signal is then: input_signals[primary_signal_dimension]
+    #     inputs_file_path = self.data_dir / 'input_signals.pkl'
+    #     with inputs_file_path.open(mode='wb') as outfile:
+    #         pkl.dump(self.input_signals, outfile)
+    #     self.log("Input signals saved at \"{}\"".format(inputs_file_path))
 
 
-    def saveInputEstimates(self):
-        input_estimates_file_path = self.data_dir / 'input_estimates.pkl'
-        with input_estimates_file_path.open(mode='wb') as outfile:
-            pkl.dump(self.input_estimates, outfile)
-        self.log("Input Estimates saved at \"{}\"".format(input_estimates_file_path))
+    # def saveInputEstimates(self):
+    #     input_estimates_file_path = self.data_dir / 'input_estimates.pkl'
+    #     with input_estimates_file_path.open(mode='wb') as outfile:
+    #         pkl.dump(self.input_estimates, outfile)
+    #     self.log("Input Estimates saved at \"{}\"".format(input_estimates_file_path))
 
 
     def saveAll(self):
@@ -379,11 +333,6 @@ class ExperimentRunner():
 
       with open(self.data_dir / f'{self.experiment_id}.log', 'w') as f:
         f.write(self.logstr)
-        # file_path = self.data_dir / 'ExperimentRunner.pkl'
-        # with file_path.open(mode='wb') as outfile:
-        #     pkl.dump(self.__dict__, outfile)
-        # self.log("ExperimentRunner saved at \"{}\"".format(file_path))
-        # self.saveLog()
 
 
     def run_simulation(self):
@@ -393,7 +342,9 @@ class ExperimentRunner():
         self.simulation_options = {'stateBound':(self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
                                    'stateBoundInputs': (self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
                                    'num_parallel_converters': self.M,
-                                   'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]}
+                                   'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]
+                                   #'jitter':{'range':self.sampling_period*1e-3}
+                                   }
         
         initalState = (2*np.random.rand(self.N*self.M) - np.ones(self.N*self.M))*1e-3
         # for k in range(self.N):
@@ -412,7 +363,7 @@ class ExperimentRunner():
         recon_time_start = time.time()
         self.eta2 = np.ones(self.M * self.N) * self.eta2_magnitude
         self.reconstruction_options = {'eta2':self.eta2,
-                                       'sigmaU2':[1.]*self.M,
+                                       'sigmaU2':[1.]*self.L,
                                        'noise':[{'std':self.sigma2_reconst,
                                                  'steeringVector': self.beta*np.eye(self.N * self.M)[:,i], 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]}
         self.reconstruction = reconstruction.WienerFilter(t, self.sys, self.input_signals, self.reconstruction_options)
@@ -424,29 +375,6 @@ class ExperimentRunner():
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
         self.finished_reconstruction = True
     
-    def unitTest(self):
-        #for key in self.__dict__.keys():
-        #   print("{} = {}".format(key, self.__dict__[key]))
-        #print("\n\n")
-        self.log("This message should have a timestamp")
-        self.log("00/00/0000 00:00:00: This message should not have a timestamp")
-        #print(self.logstr)
-
-        # self.size = round(1./self.sampling_period)
-        # self.data_dir = self.data_dir.parent / ('unitTest_' + self.data_dir.name)
-        # if not self.data_dir.exists():
-        #     self.data_dir.mkdir(parents=True)
-
-        self.run_simulation()
-        self.run_reconstruction()
-        self.log(f'Size: {self.size}')
-        self.log(f'Number of OOBs: {self.result["num_oob"]}')
-        self.log(f'OOB Rate: {self.result["num_oob"]/self.size}')
-
-        print()
-
-
-        # print(self.logstr)
 
     def getParams(self):
         input_steering_vectors = {f'b_{i}': self.input_signals[i].steeringVector for i in range(self.L)}
@@ -487,9 +415,8 @@ def main(experiment_id,
          sigma2_reconst=1e-6,
          input_phase=0,
          num_periods_in_simulation=20,
-         controller='multiBitController',
+         controller='subspaceController',
          bitsPerControl=1):
-    
     
     runner = ExperimentRunner(experiment_id=experiment_id,
                               data_dir=DATA_STORAGE_PATH,
@@ -511,42 +438,12 @@ def main(experiment_id,
                               controller=controller,
                               bitsPerControl=bitsPerControl)
 
-    # runner.unitTest()
     runner.run_simulation()
     runner.run_reconstruction()
-    # s3_resource = boto3.resource('s3')
-    # s3_file_name_prefix = uuid.uuid4().hex[:6]
-
-    # runner.log("Saving results to S3")
-    # runner.log("S3 file name: \"{}\"".format(''.join([s3_file_name_prefix, experiment_id])))
     runner.log(f'Saving results to "{DATA_STORAGE_PATH}"')
     runner.saveAll()
     with open(DATA_STORAGE_PATH / f'{experiment_id}_results.pkl', 'wb') as f:
       pkl.dump(runner, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-    # uploadTos3(
-    #   s3_connection=s3_resource,
-    #   bucket_name=BUCKET_NAME,
-    #   file_name=''.join([s3_file_name_prefix,experiment_id,'_results.pkl']),
-    #   obj=runner)
-
-    # writeStringToS3(
-    #   s3_connection=s3_resource,
-    #   bucket_name=BUCKET_NAME,
-    #   file_name=f'{s3_file_name_prefix}{experiment_id}.log',
-    #   string=runner.logstr)
-
-    # writeStringToS3(
-    #   s3_connection=s3_resource,
-    #   bucket_name=BUCKET_NAME,
-    #   file_name=f'{s3_file_name_prefix}{experiment_id}.params',
-    #   string=params_string)
-
-    # uploadTos3(
-    #   s3_connection=s3_resource,
-    #   bucket_name=BUCKET_NAME,
-    #   file_name=''.join([s3_file_name_prefix,experiment_id,'.params.pkl']),
-    #   obj=params)
 
 
 if __name__ == "__main__":
@@ -579,5 +476,6 @@ if __name__ == "__main__":
     arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int)#, default=20)
 
     args = vars(arg_parser.parse_args())
+
 
     main(**args)
