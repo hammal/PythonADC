@@ -5,12 +5,15 @@ import pandas as pd
 import pickle as pkl
 from pathlib import Path
 
-from run_experiment import ExperimentRunner
 import AnalogToDigital.evaluation as evaluation
 import AnalogToDigital.system as system
 
 
-DATA_DIR = Path('/Volumes/WD Passport/adc_data/final')
+# Edit this path
+DATA_DIR = Path('./amplitude_sweep')
+if not DATA_DIR.exists():
+    DATA_DIR.mkdir(parents=True)
+
 
 def main(experiment_id):
     experiment_directory = DATA_DIR / experiment_id
