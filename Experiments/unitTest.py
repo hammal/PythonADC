@@ -9,13 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import signal
 from pathlib import Path
-import time
-import os
-import re
-import io
-
-import boto3
-import uuid
 
 ###############################
 #         ADC Packages        #
@@ -28,11 +21,10 @@ import AnalogToDigital.evaluation as evaluation
 
 from run_experiment import ExperimentRunner
 
-unit_test_dir = "/Users/olafurjonthoroddsen/polybox/mastersverkefni/pythonADC/Experiments/unit_tests"
-DATA_STORAGE_PATH = Path(r'/Volumes/WD Passport/adc_data/final/jitter')
-# DATA_STORAGE_PATH = ""
+# Edit this path
+DATA_STORAGE_PATH = Path("./unit_tests")
 
-M = 1
+M = 4
 L = 1
 bitsPerControl = 1
 def unitTest():
@@ -48,11 +40,13 @@ def unitTest():
                               sigma2_thermal=1e-6,
                               sigma2_reconst=1e-6,
                               systemtype='ParallelIntegratorChain',
-                              controller='diagonalController',
+                              controller='subspaceController',
                               bitsPerControl=bitsPerControl)
+
+    runner.run_simulation()
+    runner.run_reconstruction()
     # print(runner.eta2_magnitude)
     # print(runner.ctrlMixingMatrix)
-    runner.unitTest()
     # params = runner.getParams()
     # for key in params.keys():
     #   print(f'{key}: {params[key]}')
@@ -62,12 +56,12 @@ def unitTest():
     # with open(DATA_STORAGE_PATH / f'jitterTest_results.pkl', 'wb') as f:
     #   pkl.dump(runner, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    # sigmadeltaperformance = evaluation.SigmaDeltaPerformance(
-    #   system=runner.sys,
-    #   estimate=runner.input_estimates[:,:]
-    #   fs=1./(runner.sampling_period),
-    #   osr=runner.OSR,
-    #   fmax=None)
+    sigmadeltaperformance = evaluation.SigmaDeltaPerformance(
+      system=runner.sys,
+      estimate=runner.input_estimates[:,:],
+      fs=1./(runner.sampling_period),
+      osr=runner.OSR,
+      fmax=None)
 
     print(runner.input_estimates.shape)
     estimates = [runner.input_estimates[:,i] for i in range(L)]
@@ -76,7 +70,7 @@ def unitTest():
     print("IP", "SNR", "TMSNR", "TSNR", "THDN")
     print(snrvsamplitude.snrVsAmp)
     
-    sigmadeltaperformance.ToTextFile(filename=DATA_STORAGE_PATH/f'jitterTest_PSD.csv', OSR=16)
+    sigmadeltaperformance.ToTextFile(filename=DATA_STORAGE_PATH/f'unitTest_PSD.csv', OSR=16)
 
     # sigmadeltaperformance2 = evaluation.SigmaDeltaPerformance(
     #   system=runner.sys,
@@ -102,14 +96,14 @@ def unitTest():
         # ax[i,1].legend()
 
     plt.draw()
-    fig.savefig("stateTrajectory.png", dpi=300)
+    fig.savefig(f'{DATA_STORAGE_PATH}/stateTrajectory.png', dpi=300)
     # ax.legend(loc='lower left', ncol=M) #loc='center left', bbox_to_anchor=(1, 0.5))
     fig_psd, ax_psd = plt.subplots()
     for i in range(L):
       snrvsamplitude.estimates[i]['performance'].PlotPowerSpectralDensity(ax=ax_psd, label=f'signal_{i}')
     # sigmadeltaperformance2.PlotPowerSpectralDensity(ax=ax[1],label='signal2')
     plt.draw()
-    fig_psd.savefig("Power Spectral Densities.png", dpi=300)
+    fig_psd.savefig(f'{DATA_STORAGE_PATH}/Power Spectral Densities.png', dpi=300)
     
 if __name__ == "__main__":
     unitTest()
