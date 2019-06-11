@@ -1,7 +1,6 @@
 ###############################
 #      Standard Packages      #
 ###############################
-import argparse
 import numpy as np
 import scipy as sp
 import pickle as pkl
@@ -9,13 +8,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import signal
 from pathlib import Path
-import time
-import os
-import re
-import io
-
-import boto3
-import uuid
 
 ###############################
 #         ADC Packages        #
@@ -26,7 +18,10 @@ import AnalogToDigital.reconstruction as reconstruction
 import AnalogToDigital.filters as filters
 import AnalogToDigital.evaluation as evaluation
 
-datadir = Path(r'/Volumes/WD Passport/adc_data/final/jitter/new jitter experiments')
+# Edit this path
+data_dir = Path(r'./jitter_results')
+if not data_dir.exists():
+    data_dir.mkdir(parents=True)
 
 
 Ts = 8e-5
@@ -35,7 +30,7 @@ N = 3
 phase = 0
 amplitude = 1
 frequency = 1./(2.*osr*Ts)
-size = (1<<19)
+size = (1<<12)
 t = np.linspace(0,(size-1)*Ts, size)
 kappa = 1
 sigma2_thermal = 1e-6
@@ -48,14 +43,11 @@ beta = 6250
 jitter_size = 1e-3
 
 
-
-
-NumberJitterEstimationStates = N
-K = NumberJitterEstimationStates
+number_of_jitter_estimation_states = N
 
 
 for sigma2_jitter in np.logspace(-8,-3,10): 
-    for RECONSTRUCTION_METHOD in ['JitterAsGaussianNoise']:#['JitterAsGaussianNoise','AugmentedSSM', 'NoJitterEstimation', 'CleanSimulation']:
+    for RECONSTRUCTION_METHOD in ['JitterAsGaussianNoise','AugmentedSSM', 'NoJitterEstimation', 'CleanSimulation']:
 
 
         if RECONSTRUCTION_METHOD == 'JitterAsGaussianNoise':
@@ -84,23 +76,23 @@ for sigma2_jitter in np.logspace(-8,-3,10):
 
         elif RECONSTRUCTION_METHOD == 'AugmentedSSM':
             A_tmp1 = np.hstack( (np.eye(N,k=-1)*beta , -np.eye(N)))
-            A_tmp2 = np.hstack( (np.zeros((K, N)), np.eye(N,k=-1)*beta) )
+            A_tmp2 = np.hstack( (np.zeros((number_of_jitter_estimation_states, N)), np.eye(N,k=-1)*beta) )
             A = np.vstack( (A_tmp1, A_tmp2) )
             print(A)    
 
-            input_vector = np.zeros(N+K)
+            input_vector = np.zeros(N+number_of_jitter_estimation_states)
             input_vector[0] = beta
-            c = np.eye(N+K)
+            c = np.eye(N+number_of_jitter_estimation_states)
             sigmaU2 = [1.]
-            eta2 = np.ones(N + K)
-            simulationOptions = {'noise': [{'std':sigma2_thermal, 'steeringVector': beta * np.eye(N+K)[:,i]} for i in range(N+K)],
+            eta2 = np.ones(N + number_of_jitter_estimation_states)
+            simulationOptions = {'noise': [{'std':sigma2_thermal, 'steeringVector': beta * np.eye(N+number_of_jitter_estimation_states)[:,i]} for i in range(N+number_of_jitter_estimation_states)],
                                  'jitter': {'range':Ts*jitter_size}}
-            mixingMatrix = - kappa * beta * np.eye(N+K)
+            mixingMatrix = - kappa * beta * np.eye(N+number_of_jitter_estimation_states)
             
             input_signal = system.Sin(Ts, amplitude=amplitude, frequency=frequency, phase=phase, steeringVector=input_vector)
             all_inputs = [input_signal]
 
-            order = N+K
+            order = N+number_of_jitter_estimation_states
 
         elif RECONSTRUCTION_METHOD == 'NoJitterEstimation':
             A = np.eye(N,k=-1)*beta
@@ -163,7 +155,7 @@ for sigma2_jitter in np.logspace(-8,-3,10):
         snrVsAmplitude = evaluation.SNRvsAmplitude(system=sys, estimates=[input_estimates[:,0]], OSR=osr)
         freq, spec = snrVsAmplitude.estimates[0]['performance'].freq, snrVsAmplitude.estimates[0]['performance'].spec
 
-        snrVsAmplitude.ToTextFile(datadir/f'{RECONSTRUCTION_METHOD}_{sigma2_jitter}_SNR.csv', delimiter=' ')
+        snrVsAmplitude.ToTextFile(data_dir/f'{RECONSTRUCTION_METHOD}_{sigma2_jitter}_SNR.csv', delimiter=' ')
         f = lambda x: 10*np.log10(x)
         df = pd.DataFrame({'freq':freq, 'spec':spec})
         fIndex = df.idxmax().spec
@@ -175,7 +167,7 @@ for sigma2_jitter in np.logspace(-8,-3,10):
         decimationMask = np.zeros(df.index.size,dtype=bool)
         decimationMask[tmp] = True
 
-        pd.DataFrame(df[decimationMask]).to_csv(datadir/f'{RECONSTRUCTION_METHOD}_sigma2jitter_{sigma2_jitter}_PSD.csv', sep=' ')
+        pd.DataFrame(df[decimationMask]).to_csv(data_dir/f'{RECONSTRUCTION_METHOD}_sigma2jitter_{sigma2_jitter}_PSD.csv', sep=' ')
 
         # nperseg = min([512 * 2 * osr, input_estimates.shape[0]])
         # window = 'hanning'
@@ -187,7 +179,7 @@ for sigma2_jitter in np.logspace(-8,-3,10):
         plt.semilogx(freq, 10*np.log10(np.abs(spec)))
         plt.grid()
         plt.draw()
-        plt.savefig(datadir /f'{RECONSTRUCTION_METHOD}_sigma2jitter_{sigma2_jitter}_PSD.png', dpi=300)
+        plt.savefig(data_dir /f'{RECONSTRUCTION_METHOD}_sigma2jitter_{sigma2_jitter}_PSD.png', dpi=300)
 
 
         experiment_information = {'jitter_size': jitter_size,
@@ -195,11 +187,11 @@ for sigma2_jitter in np.logspace(-8,-3,10):
                    'sigma2_thermal': sigma2_thermal,
                    'sigma2_reconst': sigma2_reconst,
                    'sigma2_jitter': sigma2_jitter,
-                   'K':K,
+                   'number_of_jitter_estimation_states':number_of_jitter_estimation_states,
                    }
         params_string = ''
         for key in experiment_information.keys():
             params_string = ''.join([params_string, f'{key}: {experiment_information[key]}\n'])
 
-        with open(datadir / f'{RECONSTRUCTION_METHOD}_{sigma2_jitter}.params', 'w') as f:
+        with open(data_dir / f'{RECONSTRUCTION_METHOD}_{sigma2_jitter}.params', 'w') as f:
             f.write(params_string)
