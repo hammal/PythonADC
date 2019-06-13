@@ -138,7 +138,7 @@ class System(object):
 
         Here Quantization could be implemented!
         """
-        return np.dot(self.c.transpose(), state).flatten()
+        return np.dot(self.c.transpose(), state)#.flatten()
 
 
 class Control(object):
