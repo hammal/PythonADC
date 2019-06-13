@@ -113,7 +113,7 @@ class System(object):
         """
         self.A = np.array(A, dtype=np.float64)
         self.c = np.array(c, dtype=np.float64)
-        if b:
+        if np.any(b):
             self.b = b
         else:
             self.b = np.zeros(self.A.shape[0])
@@ -164,7 +164,7 @@ class Control(object):
         if memory.shape[0] == size:
             self.memory = memory
         else:
-            self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int8)
+            self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int64)
         self.size = size
         self.memory_Pointer = 0
 
@@ -207,7 +207,8 @@ class Control(object):
         if 'projectionMatrix' in options:
             self.projectionMatrix = options['projectionMatrix']
         else:
-            self.projectionMatrix = np.dot(np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0))), self.mixingMatrix).transpose()
+            self.projectionMatrix = np.dot(self.mixingMatrix, np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0)))).transpose()
+
 
     def __getitem__(self, item):
         """
@@ -245,6 +246,10 @@ class Control(object):
         bit = (vector > self.references).flatten() * 2 - 1
         newvector = 2 * vector - bit * self.bound
         code += 2 ** (self.bitsPerControl - bitNumber) * bit
+        # print("vector", vector)
+        # print("bit", bit)
+        # print("newvector", newvector)
+        # print("code", code)
         if bitNumber < self.bitsPerControl:
             return self.algorithmicConverter(newvector, code, bitNumber + 1)
         else:
@@ -263,6 +268,7 @@ class Control(object):
         # self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
         self.memory[self.memory_Pointer, :] = self.algorithmicConverter(projectedState, 0, 1)
         self.memory_Pointer += 1
+        # print("Done Updating Control\n\n")
 
     def fun(self, t):
         """

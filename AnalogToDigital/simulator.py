@@ -7,6 +7,7 @@ import scipy
 from scipy.optimize import minimize
 from scipy.integrate import odeint
 import sdeint
+import time
 
 
 class Simulator(object):
@@ -27,6 +28,14 @@ class Simulator(object):
             print("Initial state set: %s" % self.state)
 
         self.options = options
+        self.logstr = ""
+        self.log("Simulation started!")
+        self.num_oob = 0
+
+
+    def log(self,message=""):
+        tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)
+        self.logstr += tmp
 
 
     def simulate(self, t, inputs=None):
@@ -42,7 +51,8 @@ class Simulator(object):
         t0 = t[0]
         index = 0
         tnew = t
-
+        current_sample = 0
+        num_samples = len(t)
 
         if 'jitter' in self.options:
             jitter_range = self.options['jitter']['range']
@@ -126,16 +136,29 @@ class Simulator(object):
             # print(self.state)
 
             # Clip if state is out of bound
-            if False:
+            if True:
                 bound = 1.
                 above = self.state > bound
                 below = self.state < -bound
 
-                self.state[above] = bound
-                self.state[below] = -bound
+                oob_states = np.arange(self.system.order)[np.logical_or(above,below)]
+                if any(oob_states):
+                    # self.log("STATE BOUND EXCEEDED! Sample #: {}".format(current_sample))
+                    # self.log("X_{} = {}".format(oob_states, self.state[oob_states]))
+                    self.num_oob += 1
+                    #self.state[above] = bound
+                    #self.state[below] = -bound
 
             # print(self.state)
+            current_sample += 1
             self.control.update(self.state)
+
+            # Print progress every 1e4 samples
+            try:
+                if current_sample % (num_samples//1e4) == 0:
+                    print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+            except ZeroDivisionError:
+                pass
 
         # Return simulation object
         return {
@@ -145,6 +168,8 @@ class Simulator(object):
             'system': self.system,
             'state': self.state,
             'options': self.options,
+            'log': self.logstr,
+            'num_oob': self.num_oob
         }
 
 

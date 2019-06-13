@@ -9,11 +9,15 @@ from AnalogToDigital.system import Noise
 # import copy
 from scipy.integrate import odeint
 import scipy.optimize
+
 import matplotlib.pyplot as plt
+import time
 
 CHAIN_system = True
 
 def bruteForceCare(A, B, Q, R):
+    timelimit = 10*60
+    start_time = time.time()
     # Initialize V_frw:
     V = np.eye(A.shape[0])
     V_tmp = np.zeros_like(V)
@@ -21,6 +25,8 @@ def bruteForceCare(A, B, Q, R):
     RInv = np.linalg.inv(R)
 
     while not np.allclose(V,V_tmp, rtol=1e-5, atol=1e-8):
+        if time.time() - start_time > timelimit:
+            raise Exception("Brute Force CARE solver ran out of time")
         V_tmp = V
         try:
             V = V + tau * (np.dot(A,V) + np.transpose(np.dot(A,V)) + Q - np.dot(V, np.dot(B, np.dot(RInv, np.dot(B.transpose(), V)))))
@@ -172,6 +178,9 @@ class WienerFilter(object):
         - inputs an iterable of inputs to be estimatedself.
         - options
         """
+        self.logstr = ""
+        self.log("Reconstruction started!")
+
         self.Ts = t[1] - t[0]
         self.system = system
         self.inputs = inputs
@@ -240,6 +249,13 @@ class WienerFilter(object):
         self.w = np.linalg.solve(Vf + Vb, B)
 
 
+
+
+    def log(self,message=""):
+        tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)
+        self.logstr += tmp
+
+
     def __str__(self):
         return "Af = \n%s\nBf = \n%s\nAb = \n%s\nBb = \n%s\nw = \n%s\n" % (self.Af, self.Bf, self.Ab, self.Bb, self.w)
 
@@ -269,9 +285,12 @@ class WienerFilter(object):
                 self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
                 self.Ob = - np.dot(self.Bb, self.BackwardOffsetMatrix * control.references[0]).flatten()
             else:
-                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, control.references))
-                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, control.references))
-        
+                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, np.dot(control.mixingMatrix, control.references)))
+                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, np.dot(control.mixingMatrix, control.references)))
+            # else:
+            #     self.Of = np.zeros(self.order)
+            #     self.Ob = np.zeros(self.order)
+
             print("Offset Matrices:")
             print(self.Of, self.Ob)
 
@@ -302,7 +321,7 @@ class WienerFilter(object):
         if initialState:
             mf[:,0] = initialState
         else:
-            mf[:,0] = np.array(control[0])
+            mf[:,0] = np.array(np.dot(control.mixingMatrix, control[0]))
 
         print(control.size)
         for index in range(1, control.size):
@@ -312,7 +331,7 @@ class WienerFilter(object):
             mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
             # print(mb[:, index] - mf[:, index])
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
-        return u
+        return u, self.logstr
 
 
 class ParallelWienerFilter(WienerFilter):
