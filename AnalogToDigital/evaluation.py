@@ -8,7 +8,7 @@ class SNRvsAmplitude(object):
     This is a helper class for plotting SNR vs input power
     """
 
-    def __init__(self, system, estimates, OSR=32, gamma = 1., bound = 1., fmax = None):
+    def __init__(self, system, estimates, OSR=32, gamma = 1., bound = 1., fmax = None, fs=1.):
         self.gamma = gamma
         self.bound = bound
         self.estimates = []
@@ -19,7 +19,7 @@ class SNRvsAmplitude(object):
             self.estimates.append(
                 {
                     "estimates": est,
-                    "performance": SigmaDeltaPerformance(system, est, osr=OSR, fmax=fmax),
+                    "performance": SigmaDeltaPerformance(system, est, osr=OSR, fmax=fmax, fs=fs),
                     "inputPower": np.var(est.flatten()) / (self.bound ** 2 / 2.)
                 }
             )
@@ -50,9 +50,10 @@ class SNRvsAmplitude(object):
         # print(self.shuffleMask[index])
         return self.estimates[self.shuffleMask[index]]["performance"]
 
-    def ToTextFile(self, filename):
+    def ToTextFile(self, filename, delimiter=', '):
         description = ["IP", "SNR", "TMSNR", "TSNR", "THDN"]
-        np.savetxt(filename, self.snrVsAmp, delimiter=', ', header=", ".join(description), comments='')
+        np.savetxt(filename, self.snrVsAmp, delimiter=delimiter, header=delimiter.join(description), comments='')
+
 
     def PlotInputPowerVsSNR(self, ax=False):
         # inputPower = np.zeros(self.size)
@@ -103,6 +104,7 @@ class SigmaDeltaPerformance(object):
         self.estimate -= np.mean(self.estimate)
         self.freq, self.spec = self.powerSpectralDensity()
         self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq, self.spec)
+
         if not fmax:
             self.fIndex = self.findMax(self.spec)
         else:
@@ -335,7 +337,7 @@ class SigmaDeltaPerformance(object):
         # spectrum = spectrum[:self.N/2]
         # freq = np.fft.fftfreq(self.N)[:self.N/2]
         # spectrum /= (self.N / 2) * (self.fs / 2)
-        freq, spectrum = scipy.signal.welch(self.estimate, fs=1.0, window=window, nperseg=self.N, noverlap=None, nfft=None, return_onesided=True, scaling='spectrum', axis=0)
+        freq, spectrum = scipy.signal.welch(self.estimate, fs=self.fs, window=window, nperseg=self.N, noverlap=None, nfft=None, return_onesided=True, scaling='spectrum', axis=0)
         # spectrum /= (FullScale / 4. * w1) ** 2
         return freq, spectrum
 
@@ -400,7 +402,7 @@ class SigmaDeltaPerformance(object):
         # else:
         #     return False, np.array([])
         
-    def ToTextFile(self, filename, OSR = 32):
+    def ToTextFile(self, filename, OSR = 32, delimiter=', '):
         _, _, _, _, _, _ = self.Metrics(OSR)
         signal = np.ones((self.freq.size)) * 1e-20
         harmonics = np.copy(signal)
@@ -427,7 +429,7 @@ class SigmaDeltaPerformance(object):
 
         data = np.nan_to_num(data)
 
-        np.savetxt(filename, data, delimiter=', ', header=", ".join(description), comments='')
+        np.savetxt(filename, data, delimiter=delimiter, header=delimiter.join(description), comments='', fmt='%.5f')
         
 
 class Evaluation(object):

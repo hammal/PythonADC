@@ -41,7 +41,7 @@ def test_evaluate_PlotTransferFunctions():
 
     recon = reconstruction.WienerFilter(t, sys, (inp,))
 
-    u_hat = recon.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
 
     ev = evaluation.Evaluation(sys, u_hat, (inp,))
 
@@ -95,7 +95,7 @@ def test_evaluate_PlotTransferFunctions_For_PostFiltering():
     # System 1
     recon = reconstruction.WienerFilter(t, sys, (inp,), {"eta2":eta2*np.ones(order)})
 
-    u_hat = recon.filter(ctrl)
+    u_hat, log = recon.filter(ctrl)
 
     ev = evaluation.Evaluation(sys, u_hat, (inp,))
 
@@ -155,14 +155,14 @@ def test_evaluate_PlotTransferFunctions_For_PostFiltering():
 
     print(ctrl.mixingMatrix)
 
-    u_hatP_1 = reconstructionFiltered1.filter(ctrl)
+    u_hatP_1, log_1 = reconstructionFiltered1.filter(ctrl)
     print(ctrl.mixingMatrix)
 
     print(postFilter2)
-    u_hatP_2 = reconstructionFiltered2.filter(ctrl)
-    u_hatP_3 = reconstructionFiltered3.filter(ctrl)
-    u_hatP_4 = reconstructionFiltered4.filter(ctrl)
-    u_hatP_5 = reconstructionFiltered5.filter(ctrl)
+    u_hatP_2, log_2 = reconstructionFiltered2.filter(ctrl)
+    u_hatP_3, log_3 = reconstructionFiltered3.filter(ctrl)
+    u_hatP_4, log_4 = reconstructionFiltered4.filter(ctrl)
+    u_hatP_5, log_5 = reconstructionFiltered5.filter(ctrl)
 
     evP1 = evaluation.Evaluation(sys, u_hatP_1, (inp,))
     evP2 = evaluation.Evaluation(sys, u_hatP_2, (inp,))
@@ -291,9 +291,9 @@ def test_evaluate_WithNoise():
     reconSIMO = reconstruction.WienerFilter(t, sys, (inp,), {"eta2":eta2 * np.ones(order)})
     reconMIMO = reconstruction.WienerFilter(t, sys, [inp], options)
 
-    u_hatSISO = reconSISO.filter(ctrl)
-    u_hatSIMO = reconSIMO.filter(ctrl)
-    u_hatMIMO = reconMIMO.filter(ctrl)
+    u_hatSISO, log_SISO = reconSISO.filter(ctrl)
+    u_hatSIMO, log_SIMO = reconSIMO.filter(ctrl)
+    u_hatMIMO, log_MIMO = reconMIMO.filter(ctrl)
 
     print(reconSISO)
 
@@ -405,7 +405,7 @@ def test_evaluate_TextToFile():
     eta2 = 1e0
 
     reconstruction = ADC.reconstruction.WienerFilter(t, sys, (inp,), {"eta2":np.ones(order) * eta2})
-    u_hat = reconstruction.filter(ctrl)
+    u_hat, log = reconstruction.filter(ctrl)
 
     # if PLOTS:
     #     plt.figure()

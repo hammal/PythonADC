@@ -123,7 +123,7 @@ filter = ADC.WienerFilter(t, model, inputs=(input,), options=filterSpec)
 
 # filter = ADC.WienerFilterWithObservations(**filterSpec)
 
-u_hat = filter.filter(control)
+u_hat, logstr = filter.filter(control)
 # stf, ntf = filter.frequencyResponse(fspace)
 
 size = int(u.size)
