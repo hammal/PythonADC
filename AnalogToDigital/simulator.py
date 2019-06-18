@@ -9,6 +9,7 @@ from scipy.integrate import odeint
 import sdeint
 import time
 
+import matplotlib.pyplot as plt
 
 class Simulator(object):
     """
@@ -66,23 +67,26 @@ class Simulator(object):
         # for timeInstance in tnew[1:]:
 
         sampling_grid_remaining = np.copy(sampling_grid)
+        tau_old = 0
+        # h = sampling_grid[1] - sampling_grid[0]
         def f(x, tau):
-            nonlocal sampling_grid_remaining, current_sample, num_samples
+            nonlocal tau_old, sampling_grid_remaining, current_sample, num_samples
             """
             Compute the system derivative considering state control and input.
-            """
-            if tau in sampling_grid_remaining:
+            """ 
+            if tau in sampling_grid_remaining and (tau-tau_old > 0):
                 current_sample += 1
                 # Update control descisions
                 self.control.update(x)
-
+                # print("Control Updated\t", np.abs((tau-tau_old) - h))
+                tau_old = tau
+                sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
                 # Print progress every 1e4 samples
                 try:
-                    if current_sample % 1e4 == 0:
+                    if current_sample % (num_samples//1e4) == 0:
                         print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
                 except ZeroDivisionError:
                     pass
-                sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
 
             hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
             control = self.control.fun(tau)
@@ -93,6 +97,7 @@ class Simulator(object):
 
             return hom + control + input
         if "noise" in self.options:
+            print("NOISE")
              # Shock Noise
             noise_state = np.zeros((self.system.order, len(self.options["noise"])))
             for i, noiseSource in enumerate(self.options['noise']):
@@ -104,15 +109,22 @@ class Simulator(object):
                     # noise_state += (np.random.rand() - 0.5 ) * 2 * std   
             def g(x, t):
                 return noise_state
-               
+            print("Using sdeint.itoint")
+            t_start = time.time()
+            self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=sampling_grid))#[-1, :]
+            print("Runtime: %.2f" % (time.time() - t_start))
         else:
             def g(x,t):
                 return np.zeros((self.system.order, 1))
+            print("Using scipy.integrate.odeint")
+            t_start = time.time()
+            self.state = np.transpose(scipy.integrate.odeint(f, y0=np.zeros_like(self.state), t=sampling_grid, tcrit=sampling_grid, rtol=1.e-2, atol=1.e-2))
+            print("Runtime: %.2f" % (time.time() - t_start))
 
         # Solve ordinary differential equation
         # self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=100, rtol=1e-13, hmin=1e-12)[-1, :]
         # tspace = np.linspace(t0, timeInstance, 10)
-        self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=sampling_grid))#[-1, :]
+        
         
         # Store observations
         if outputDimension:
