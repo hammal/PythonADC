@@ -125,7 +125,9 @@ class Simulator(object):
 
             t_start = time.time()
             self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=simulation_grid))[:, ::(1+numberOfAdditionalPoints)]
-            print("Runtime: %.2f" % (time.time() - t_start))
+            runtime = time.time() - t_start
+            print("\n\nRuntime: %.3f" % runtime)
+            print("\n%.3f milliseconds/sample\n" % (1000*(runtime/num_samples)))
         else:
             def g(x,t):
                 return np.zeros((self.system.order, 1))
