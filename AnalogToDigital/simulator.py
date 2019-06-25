@@ -67,14 +67,12 @@ class Simulator(object):
         # for timeInstance in tnew[1:]:
 
         sampling_grid_remaining = np.copy(sampling_grid)
-        tau_old = 0
-        # h = sampling_grid[1] - sampling_grid[0]
         def f(x, tau):
-            nonlocal tau_old, sampling_grid_remaining, current_sample, num_samples
+            nonlocal sampling_grid_remaining, current_sample, num_samples
             """
             Compute the system derivative considering state control and input.
             """ 
-            if tau in sampling_grid_remaining and (tau-tau_old > 0):
+            if tau in sampling_grid_remaining:
                 current_sample += 1
                 # Update control descisions
                 self.control.update(x)
@@ -110,8 +108,23 @@ class Simulator(object):
             def g(x, t):
                 return noise_state
             print("Using sdeint.itoint")
+
+            # Create a simulation grid with higher resolution than the
+            # sampling grid by linearly interpolating between sampling times
+            if self.options["numberOfAdditionalPoints"]:
+                numberOfAdditionalPoints = self.options["numberOfAdditionalPoints"]
+                temp = np.zeros((sampling_grid.size-1) * (1+numberOfAdditionalPoints) + 1)
+                temp[::(1+numberOfAdditionalPoints)] = sampling_grid
+
+                for index in range(sampling_grid.size-1):
+                    temp[index * (numberOfAdditionalPoints+1) + 1: (index + 1) * (numberOfAdditionalPoints+1)] = np.linspace(sampling_grid[index],sampling_grid[index+1],numberOfAdditionalPoints+2)[1:-1]
+                simulation_grid = temp
+            else:
+                simulation_grid = sampling_grid
+                numberOfAdditionalPoints = 0
+
             t_start = time.time()
-            self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=sampling_grid))#[-1, :]
+            self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=simulation_grid))[:, ::(1+numberOfAdditionalPoints)]
             print("Runtime: %.2f" % (time.time() - t_start))
         else:
             def g(x,t):
