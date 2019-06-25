@@ -339,10 +339,8 @@ class ExperimentRunner():
         t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         self.sim_start_time = time.time()
 
-        self.simulation_options = {'stateBound':(self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
-                                   'stateBoundInputs': (self.sampling_period * self.beta * self.kappa) / (1. - (self.sampling_period * self.beta / np.sqrt(self.M))),
-                                   'num_parallel_converters': self.M,
-                                   'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)]
+        self.simulation_options = {'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)],
+                                   'numberOfAdditionalPoints': 1
                                    #'jitter':{'range':self.sampling_period*1e-3}
                                    }
         
