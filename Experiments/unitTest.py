@@ -24,23 +24,24 @@ from run_experiment import ExperimentRunner
 # Edit this path
 DATA_STORAGE_PATH = Path("./unit_tests")
 
-M = 4
+M = 1
+N = 3
 L = 1
 bitsPerControl = 1
 def unitTest():
     runner = ExperimentRunner(experiment_id="unitTest",
                               data_dir=DATA_STORAGE_PATH,
                               M=M,
-                              N=3,
+                              N=N,
                               L=L,
                               input_phase=0,
-                              input_amplitude=1,
+                              input_amplitude=0,
                               input_frequency=None,
                               num_periods_in_simulation=1,
-                              sigma2_thermal=1e-6,
-                              sigma2_reconst=1e-6,
+                              sigma2_thermal=0,
+                              sigma2_reconst=0,
                               systemtype='ParallelIntegratorChain',
-                              controller='subspaceController',
+                              controller='diagonalController',
                               bitsPerControl=bitsPerControl)
 
     runner.run_simulation()
@@ -70,7 +71,9 @@ def unitTest():
     print("IP", "SNR", "TMSNR", "TSNR", "THDN")
     print(snrvsamplitude.snrVsAmp)
     
-    sigmadeltaperformance.ToTextFile(filename=DATA_STORAGE_PATH/f'unitTest_PSD.csv', OSR=16)
+    save = False
+    if save:
+      sigmadeltaperformance.ToTextFile(filename=DATA_STORAGE_PATH/f'unitTest_PSD.csv', OSR=16)
 
     # sigmadeltaperformance2 = evaluation.SigmaDeltaPerformance(
     #   system=runner.sys,
@@ -96,14 +99,18 @@ def unitTest():
         # ax[i,1].legend()
 
     plt.draw()
-    fig.savefig(f'{DATA_STORAGE_PATH}/stateTrajectory.png', dpi=300)
+    if save:
+      fig.savefig(f'{DATA_STORAGE_PATH}/stateTrajectory.png', dpi=300)
     # ax.legend(loc='lower left', ncol=M) #loc='center left', bbox_to_anchor=(1, 0.5))
     fig_psd, ax_psd = plt.subplots()
     for i in range(L):
       snrvsamplitude.estimates[i]['performance'].PlotPowerSpectralDensity(ax=ax_psd, label=f'signal_{i}')
     # sigmadeltaperformance2.PlotPowerSpectralDensity(ax=ax[1],label='signal2')
     plt.draw()
-    fig_psd.savefig(f'{DATA_STORAGE_PATH}/Power Spectral Densities.png', dpi=300)
+    if save:
+      fig_psd.savefig(f'{DATA_STORAGE_PATH}/Power Spectral Densities.png', dpi=300)
+    else:
+      plt.show()
     
 if __name__ == "__main__":
     unitTest()
