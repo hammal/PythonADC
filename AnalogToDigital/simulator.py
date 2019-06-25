@@ -111,7 +111,7 @@ class Simulator(object):
 
             # Create a simulation grid with higher resolution than the
             # sampling grid by linearly interpolating between sampling times
-            if self.options["numberOfAdditionalPoints"]:
+            if 'numberOfAdditionalPoints' in self.options:
                 numberOfAdditionalPoints = self.options["numberOfAdditionalPoints"]
                 temp = np.zeros((sampling_grid.size-1) * (1+numberOfAdditionalPoints) + 1)
                 temp[::(1+numberOfAdditionalPoints)] = sampling_grid
