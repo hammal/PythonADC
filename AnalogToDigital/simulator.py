@@ -77,7 +77,6 @@ class Simulator(object):
                 # Update control descisions
                 self.control.update(x)
                 # print("Control Updated\t", np.abs((tau-tau_old) - h))
-                tau_old = tau
                 sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
                 # Print progress every 1e4 samples
                 try:
@@ -111,7 +110,7 @@ class Simulator(object):
 
             # Create a simulation grid with higher resolution than the
             # sampling grid by linearly interpolating between sampling times
-            if 'numberOfAdditionalPoints' in self.options:
+            if 'numberOfAdditionalPoints' in self.options and self.options['numberOfAdditionalPoints'] > 0:
                 numberOfAdditionalPoints = self.options["numberOfAdditionalPoints"]
                 temp = np.zeros((sampling_grid.size-1) * (1+numberOfAdditionalPoints) + 1)
                 temp[::(1+numberOfAdditionalPoints)] = sampling_grid
@@ -126,8 +125,10 @@ class Simulator(object):
             t_start = time.time()
             self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=simulation_grid))[:, ::(1+numberOfAdditionalPoints)]
             runtime = time.time() - t_start
-            print("\n\nRuntime: %.3f" % runtime)
-            print("\n%.3f milliseconds/sample\n" % (1000*(runtime/num_samples)))
+            # print("\n################\n")
+            # print("Runtime: %.3f" % runtime)
+            # print("%.3f milliseconds/sample" % (1000*(runtime/num_samples)))
+            # print("\n################")
         else:
             def g(x,t):
                 return np.zeros((self.system.order, 1))
