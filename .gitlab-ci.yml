@@ -42,6 +42,11 @@ testCARE:
   script:
         - "python -m AnalogToDigital.test.test_care"
 
+testRuntime:
+  stage: test
+  script:
+        - "python -m AnalogToDigital.test.test_runtime"
+
 # testDeltaSigma:
 #   image: continuumio/anaconda
 #   before_script:
