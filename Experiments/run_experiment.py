@@ -244,6 +244,47 @@ class ExperimentRunner():
             self.log("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
             print("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
 
+        elif self.systemtype == "FullyParallelSystem":
+            self.A = np.zeros((self.N*self.M, self.N*self.M))
+            for k in range(N-1):
+              self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = beta*np.eye(M)
+
+            # Limit the low frequency gain of the filter
+            # at approximately the thermal noise level
+            LeakyIntegrators = False
+            if LeakyIntegrators == True:
+              self.rho = beta/((sigma2_thermal)**(-1/N))
+              self.A -= np.eye(N*M)*self.rho
+
+            # Define input signals:
+            self.input_signals = []
+            self.all_input_signal_frequencies = np.zeros(L)
+            self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
+            allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(1,3*M))
+            for i in range(self.L):
+                if i == self.primary_signal_dimension: continue
+                k = np.random.randint(0,L-1)
+                self.all_input_signal_frequencies[i] = allowed_signal_frequencies[i]
+                self.all_input_signal_amplitudes[i] = input_amplitude
+
+            vector = np.zeros(self.M*self.N)
+            vector[0:self.M] = beta * np.ones(M)
+            self.input_signals.append(system.Sin(self.sampling_period,
+                                                 amplitude=self.all_input_signal_amplitudes[i],
+                                                 frequency=self.all_input_signal_frequencies[i],
+                                                 phase=self.input_phase,#+ (np.pi/2)*i,
+                                                 steeringVector=vector))
+            print(f'b_{i} = {self.input_signals[i].steeringVector}')
+            self.input_signals = tuple(self.input_signals)
+
+
+            self.c = np.eye(self.N * self.M)
+            self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
+
+            systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
+            self.eta2_magnitude = np.max(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)
+            self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
+            print("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
         else:
             raise NotImplemented
 
@@ -299,7 +340,7 @@ class ExperimentRunner():
             self.ctrlMixingMatrix = np.zeros((N*M,N*M))
             if dither:
               self.ctrlMixingMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * beta*0.05  / (self.M*self.N)
-            self.ctrlMixingMatrix += - self.kappa * self.beta * np.sqrt(M) * np.eye(self.N * self.M)
+            self.ctrlMixingMatrix += - self.kappa * self.beta * np.eye(self.N * self.M)
 
         # elif controller == 'blockDiagonalController:
         #   for k in range(N):
