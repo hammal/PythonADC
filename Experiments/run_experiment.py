@@ -7,14 +7,9 @@ import argparse
 import numpy as np
 import scipy as sp
 import pickle as pkl
-import pandas as pd
-import matplotlib.pyplot as plt
-from scipy import signal
 from pathlib import Path
 import time
-import os
 import re
-import io
 
 ###############################
 #         ADC Packages        #
@@ -22,7 +17,9 @@ import io
 import AnalogToDigital.system as system
 import AnalogToDigital.simulator as simulator
 import AnalogToDigital.reconstruction as reconstruction
-import AnalogToDigital.filters as filters
+
+
+from gram_schmidt import gram_schmidt
 
 
 # Edit this path
@@ -56,9 +53,11 @@ class ExperimentRunner():
                  sigma2_reconst=1e-6,
                  num_periods_in_simulation=100,
                  controller='subspaceController',
-                 bitsPerControl=1):
+                 bitsPerControl=1,
+                 leaky=False,
+                 dither=False):
 
-        print("Initializing Experiment | ID: %s" %experiment_id)
+        print("Initializing Experiment | ID: %s" % experiment_id)
         self.experiment_id = experiment_id
         self.data_dir = Path(data_dir)
         self.M = M
@@ -75,13 +74,14 @@ class ExperimentRunner():
         self.kappa = kappa
         self.sigma2_thermal = sigma2_thermal
         self.sigma2_reconst = sigma2_reconst
+        self.leakyIntegrators = leaky
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
 
         self.controller = controller
         self.bitsPerControl = bitsPerControl
 
-        self.border = np.int(self.size //100)
+        self.border = np.int(self.size // 100)
         self.all_input_signal_amplitudes = np.zeros(L)
         self.all_input_signal_amplitudes[primary_signal_dimension] = input_amplitude
 
@@ -91,6 +91,8 @@ class ExperimentRunner():
         self.finished_reconstruction = False
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True)
+
+        self.robustness = [0]#{'controlInputMatrix':0.01}
 
         #################################################
         #     System and input signal specifications    #
@@ -103,63 +105,63 @@ class ExperimentRunner():
         if self.input_frequency == None:
             self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
             self.log(f'Setting f_sig = f_s/(2*OSR) = {self.input_frequency}')
+        self.H = hadamardMatrix(self.M)
+
+        # Define input signals:
+        self.input_signals = []
+        self.all_input_signal_frequencies = np.zeros(L)
+        self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
+        allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(1,3*self.M))
+        for i in range(self.L):
+            if i == self.primary_signal_dimension: continue
+            k = np.random.randint(0,L-1)
+            self.all_input_signal_frequencies[i] = allowed_signal_frequencies[i]
+            self.all_input_signal_amplitudes[i] = self.input_amplitude
+            print("frequency_{} = {}".format(i, allowed_signal_frequencies[i]))
+
+        self.all_input_signal_amplitudes[self.primary_signal_dimension] = self.input_amplitude
 
         if self.systemtype == "ParallelIntegratorChain":
 
             self.A = np.zeros((self.N*self.M, self.N*self.M))
             mixingPi = np.zeros((self.N-1, self.M, self.M))
-            H = hadamardMatrix(self.M)
             
             if N > 1:
                 # L=1 means just one of M dimensions is used and there is
                 # only one input signal => We scale up the input vector by sqrt(M)
                 if L == 1:
                     for k in range(N-1):
-                        mixingPi[k] = beta * np.sqrt(M) * (np.outer(H[:,0],H[:,0]))# + beta * np.sqrt(M) * sum(np.outer(H[:,i],H[:,i]) for i in range(1,self.M)) * 1e-3
+                        mixingPi[k] = self.beta * np.sqrt(M) * (np.outer(H[:,0],H[:,0]))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 # L=M means M input signals
                 elif L == M:
                     for k in range(N-1):
-                        mixingPi[k] = self.beta * np.sqrt(M) * np.eye(M) #(sum(np.outer(H[:,i],H[:,i]) for i in range(self.M)))
+                        mixingPi[k] = self.beta * np.sqrt(M) * np.eye(M)
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 else:
                     for k in range(N-1):
                         mixingPi[k] = self.beta * np.sqrt(M/L) * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.L)))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                     # raise NotImplemented
-                print("A = {}".format(self.A))
             else:
               mixingPi = [np.zeros((M,M))]
 
             # Limit the low frequency gain of the filter
             # at approximately the thermal noise level
-            LeakyIntegrators = True
-            if LeakyIntegrators == True:
-              self.rho = beta/((sigma2_thermal)**(-1/N))
-              self.A -= np.eye(N*M)*self.rho
-
-            # Define input signals:
-            self.input_signals = []
-            self.all_input_signal_frequencies = np.zeros(L)
-            self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
-            allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(1,3*M))
-            for i in range(self.L):
-                if i == self.primary_signal_dimension: continue
-                k = np.random.randint(0,L-1)
-                self.all_input_signal_frequencies[i] = allowed_signal_frequencies[i]
-                self.all_input_signal_amplitudes[i] = input_amplitude
+            self.rho = self.compute_rho()
+            self.A -= np.eye(N*M)*self.rho
 
             # Define input steeringVectors
             if L == 1:
-              inputVectorMatrix = beta * np.sqrt(M) * H
-            elif L == 2:
-              # The outer product sum results in a checkerboard matrix with 1/0 entries.
-              # We pick input vectors from there and scale up by M (undoing the attenuation from the outer products)
-              inputVectorMatrix = beta * (M/2) * ( np.outer(H[:,0],H[:,0]) + np.outer(H[:,1],H[:,1]) ) * 2
-            elif L == M:
-              inputVectorMatrix = beta * np.sqrt(M) * (np.hstack( (np.outer(H[:,i],H[:,i])[:,0].reshape(-1,1) for i in range(L)) ))
+              inputVectorMatrix = self.beta * np.sqrt(M) * self.H
+            # elif L == 2:
+            #   # The outer product sum results in a checkerboard matrix with 1/0 entries.
+            #   # We pick input vectors from there and scale up by M (undoing the attenuation from the outer products)
+            #   inputVectorMatrix = self.beta * (M/2) * ( np.outer(H[:,0],H[:,0]) + np.outer(H[:,1],H[:,1]) ) * 2
+            # elif L == M:
+            #   inputVectorMatrix = self.beta * np.sqrt(M) * (np.hstack( (np.outer(H[:,i],H[:,i])[:,0].reshape(-1,1) for i in range(L)) ))
             else:
-              inputVectorMatrix = beta * np.sqrt(M/L) * H
+              raise NotImplemented
 
             for i in range(self.L):
                 vector = np.zeros(self.M*self.N)
@@ -172,16 +174,12 @@ class ExperimentRunner():
                 print(f'b_{i} = {self.input_signals[i].steeringVector}')
             self.input_signals = tuple(self.input_signals)
 
-
             self.c = np.eye(self.N * self.M)
             self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
 
-            systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
-            self.eta2_magnitude = np.max(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)
-            self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
+            self.eta2_magnitude = self.compute_eta2()
             print("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
-
-        elif self.systemtype == "CyclicIntegratorChain":
+        elif self.systemtype == "CyclicHadamard":
             # [   0                                mixingPi_1]
             # [mixingPi_2                              0     ]
             # [   0       mixingPi_3                   0     ]
@@ -196,79 +194,69 @@ class ExperimentRunner():
 
             self.A = np.zeros((self.N*self.M, self.N*self.M))
             mixingPi = np.zeros((self.N, self.M, self.M))
-            H = hadamardMatrix(self.M)
-            
-
-            self.all_input_signal_frequencies = np.zeros(L)
-            self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
-            self.all_input_signal_amplitudes[self.primary_signal_dimension] = self.input_amplitude
 
             if N > 1:
                 # Iterate just like before, down the first sub-diagonal, always summing over all but the k'th pi vector
                 for k in range(self.M):
-                    mixingPi[k] = beta * sum(np.outer(H[:,i],H[:,i]) for i in range(self.N) if i != k)
-
+                    mixingPi[k] = self.beta * sum(np.outer(self.H[:,i],self.H[:,i]) for i in range(self.N) if i != k)
                 self.A[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0]
                 for k in range(self.M-1):
                   self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1]
                 # print(self.A)
 
-                vec = np.hstack((H[:,i] for i in range(1,self.M)))
-                vec = np.hstack((vec, H[:,0]))
-                if np.any(np.abs(np.dot(self.A,vec)) > 1e-14):
+                vec = np.hstack((self.H[:,i] for i in np.append(np.arange(1,self.M),0)))
+                if np.any(np.abs(np.dot(self.A,vec))):
                   print("Error in building cyclic system. A.dot(vec) != 0")
                   print(np.dot(self.A,vec))
             else:
               mixingPi = [np.zeros((M,M))]
+
+            self.rho = self.compute_rho()
+            print("rho = {}".format(self.rho))
+            self.A -= np.eye(N*M)*self.rho
+
             # Define input signals:
             self.input_signals = []
             if self.L==1:
               vector = np.zeros(self.M*self.N)
               for k in range(self.M):
-                vector[k*self.M:(k+1)*self.M] = beta * H[:,k]
+                vector[k*self.M:(k+1)*self.M] = self.beta * self.H[:,k]
 
+              # self.input_signals.append(system.Constant(amplitude=self.input_amplitude,
+              #                                           steeringVector=vector))
               self.input_signals.append(system.Sin(self.sampling_period,
                                                    amplitude=self.input_amplitude,
                                                    frequency=self.input_frequency,
                                                    phase=self.input_phase,
                                                    steeringVector=vector))
 
-            else:
-              pass
+            elif self.L == self.M:
+              for k in range(self.L):
+                vector = np.zeros(self.M*self.N)
+                vector[k*self.M:(k+1)*self.M] = self.beta * self.H[:,k]
+
+                self.input_signals.append(system.Sin(self.sampling_period,
+                                                   amplitude=self.input_amplitude,
+                                                   frequency=self.all_input_signal_frequencies[k],
+                                                   phase=self.input_phase,# + 2*np.pi*np.random.rand(),
+                                                   steeringVector=vector))
 
             self.c = np.eye(self.N * self.M)
             self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
-
-            systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
-            self.eta2_magnitude = np.sum(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)
-            self.log("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
-            print("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
-
+    
+            # print("sum( |G(0)b|^2 ) = {}".format(np.sum(np.abs(systemResponse(0)))))
+            self.eta2_magnitude = self.compute_eta2()
+            print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
         elif self.systemtype == "FullyParallelSystem":
             self.A = np.zeros((self.N*self.M, self.N*self.M))
             for k in range(N-1):
-              self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = beta*np.eye(M)
+              self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = self.beta * np.eye(M)
 
-            # Limit the low frequency gain of the filter
-            # at approximately the thermal noise level
-            LeakyIntegrators = False
-            if LeakyIntegrators == True:
-              self.rho = beta/((sigma2_thermal)**(-1/N))
-              self.A -= np.eye(N*M)*self.rho
-
-            # Define input signals:
-            self.input_signals = []
-            self.all_input_signal_frequencies = np.zeros(L)
-            self.all_input_signal_frequencies[self.primary_signal_dimension] = self.input_frequency
-            allowed_signal_frequencies = self.input_frequency * (0.5**np.arange(1,3*M))
-            for i in range(self.L):
-                if i == self.primary_signal_dimension: continue
-                k = np.random.randint(0,L-1)
-                self.all_input_signal_frequencies[i] = allowed_signal_frequencies[i]
-                self.all_input_signal_amplitudes[i] = input_amplitude
+            self.rho = self.compute_rho()
+            self.A -= np.eye(N*M)*self.rho
 
             vector = np.zeros(self.M*self.N)
-            vector[0:self.M] = beta * np.ones(M)
+            vector[0:self.M] = self.beta * np.ones(M)
             self.input_signals.append(system.Sin(self.sampling_period,
                                                  amplitude=self.all_input_signal_amplitudes[i],
                                                  frequency=self.all_input_signal_frequencies[i],
@@ -281,41 +269,96 @@ class ExperimentRunner():
             self.c = np.eye(self.N * self.M)
             self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
 
-            systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
-            self.eta2_magnitude = np.max(np.abs(systemResponse(1./(2. * sampling_period * OSR)))**2)
-            self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
-            print("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
+            self.eta2_magnitude = compute_eta2()
+            print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
+        elif self.systemtype == "CyclicGramSchmidt":
+            # [   0                                mixingPi_1]
+            # [mixingPi_2                              0     ]
+            # [   0       mixingPi_3                   0     ]
+            # [   .     .            .                 .     ]
+            # [   .         .             .            .     ]
+            # [   .                                    .     ]
+            # [                                        0     ]
+            # [   0                        mixingPi_N  0     ]
+
+
+            # mixingPi_i = beta*(sqrt(M) / M)(  sum(h_j, h_j.T) for j != i  )
+
+            self.A = np.zeros((self.N*self.M, self.N*self.M))
+            mixingPi = np.zeros((self.N, self.M, self.M))
+
+            self.GramSchmidtBasis = gram_schmidt(np.random.randn(self.M,self.M))
+
+            if N > 1:
+                # Iterate just like before, down the first sub-diagonal, always summing over all but the k'th pi vector
+                for k in range(self.M):
+                    mixingPi[k] = self.beta * sum(np.outer(self.GramSchmidtBasis[:,i], self.GramSchmidtBasis[:,i]) for i in range(self.N) if i != k)
+                self.A[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0]
+                for k in range(self.M-1):
+                  self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1]
+                # print(self.A)
+
+                vec = np.hstack((self.GramSchmidtBasis[:,i] for i in np.append(np.arange(1,self.M),0)))
+                if np.any(np.abs(np.dot(self.A/self.beta,vec))):
+                  print("Error in building cyclic system. A.dot(vec) != 0")
+                  print(np.dot(self.A,vec))
+            else:
+              mixingPi = [np.zeros((M,M))]
+
+            self.rho = self.compute_rho()
+            self.A -= np.eye(N*M)*self.rho
+
+            # Define input signals:
+            self.input_signals = []
+            if self.L==1:
+              vector = np.zeros(self.M*self.N)
+              for k in range(self.M):
+                vector[k*self.M:(k+1)*self.M] = self.beta * self.GramSchmidtBasis[:,k]
+
+              self.input_signals.append(system.Sin(self.sampling_period,
+                                                   amplitude=self.input_amplitude,
+                                                   frequency=self.input_frequency,
+                                                   phase=self.input_phase,
+                                                   steeringVector=vector))
+              # system.Constant(amplitude=0,
+              #                                           steeringVector=vector))
+
+            else:
+              pass
+
+            self.c = np.eye(self.N * self.M)
+            self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
+
+            self.eta2_magnitude = self.compute_eta2()
+            print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
         else:
-            raise NotImplemented
+            raise Exception("Invalid system type: '{}'".format(self.systemtype))
 
-        # pd.DataFrame(self.A).to_csv('A_matrix.csv')
-        # print("A = \n%s\nb = \n%s" % (self.A, self.input_signals[self.primary_signal_dimension].steeringVector))
-
+        print("A = {}".format(self.A))
 
         #################################################
         #           Controller specification            #
         #################################################
-        dither = False
+        self.dither = dither
         """
           The subspace controller is only implemented for L=1 signal right now.
         """
         if controller == 'subspaceController':
           if self.systemtype == 'ParallelIntegratorChain':
-            self.ctrlMixingMatrix = np.zeros((self.N*self.M, self.N))
+            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N))
             # if L>1:
             #   raise "Multi-Bit controller not implemented for L>1 input signals"
             if dither:
-              self.ctrlMixingMatrix =  (np.random.randint(2,size=(N*M , N))*2 - 1)*beta*1e-3
+              self.ctrlInputMatrix =  (np.random.randint(2,size=(N*M , N))*2 - 1)*self.beta*1e-3
 
             if L==1:
               for i in range(N):
-                self.ctrlMixingMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * H[:,0]
+                self.ctrlInputMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * self.H[:,0]
             else:
               raise NotImplemented
-              # self.ctrlMixingMatrix = np.zeros((N*M,N*M))
-              # for i in range(N):
-              #   self.ctrlMixingMatrix[i*M:(i+1)*M,i*M:(i+1)*M] = -np.sqrt(self.M) *  self.beta * H # 
-          elif self.systemtype == 'CyclicIntegratorChain':
+            self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+
+          elif self.systemtype == 'CyclicHadamard':
             """ Control mixing matrix for the cyclic parallel system:
                         [  H    0    ...      0 ]
                         [  0    H    ...      0 ]
@@ -327,34 +370,50 @@ class ExperimentRunner():
                 # Xi_k eqdef  [pi_1^T ... pi_{k-1}^T pi_{k+1}^T ... pi_M^T]^T
             """
 
-            self.ctrlMixingMatrix = np.zeros((self.N*self.M, self.N * self.M))
+            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N * self.M))
             if dither:
-              self.ctrlMixingMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1)*beta*1e-3
+              self.ctrlInputMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1)*self.beta*1e-3
 
             for k in range(self.M):
-              self.ctrlMixingMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - beta * H
+              self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - self.beta * self.H.transpose()
+
+            self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+
+            if 'controlInputMatrix' in self.robustness:
+              print("Control Input Matrix has +/- {}% error".format(self.robustness['controlInputMatrix']*100))
+              ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.robustness['controlInputMatrix']
+              self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
+               # np.dot(tmp, np.diag(1/(np.linalg.norm(tmp, ord=2, axis=0)))).transpose()
+
             # for k in range(self.N):
             #   self.ctrlMixingMatrix[k*self.M:(k+1)*self.M, k*(self.M-1):(k+1)*(self.M-1)] = - beta * np.delete(H,k, axis=1)
-          
-        elif controller == 'diagonalController':
-            self.ctrlMixingMatrix = np.zeros((N*M,N*M))
+          elif self.systemtype == 'CyclicGramSchmidt':
+            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N * self.M))
             if dither:
-              self.ctrlMixingMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * beta*0.05  / (self.M*self.N)
-            self.ctrlMixingMatrix += - self.kappa * self.beta * np.eye(self.N * self.M)
+              self.ctrlInputMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1)*self.beta*1e-3
+            for k in range(self.M):
+              self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - self.beta * self.GramSchmidtBasis.transpose()
 
-        # elif controller == 'blockDiagonalController:
-        #   for k in range(N):
-        #     self.ctrlMixingMatrix[k * self.M: (k+1) * self.M,
-        #                           k * self.M:(k+1) * self.M] = (-self.beta
-        #                                                         * np.outer(H[:,0],H[:,0]))
+            self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+
+        elif controller == 'diagonalController':
+            self.ctrlInputMatrix = np.zeros((N*M,N*M))
+            if dither:
+              self.ctrlInputMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * self.beta*1e-3
+            self.ctrlInputMatrix += - self.kappa * self.beta * np.eye(self.N * self.M)
+            self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
 
         self.ctrlOptions = {
             'bitsPerControl':bitsPerControl,
-            'bound':1,
+            'projectionMatrix':self.ctrlObservationMatrix,
+            'bound':1
         }
-        self.ctrl = system.Control(self.ctrlMixingMatrix, self.size, options=self.ctrlOptions)
 
-        print("ctrlMixingMatrix: %s\n" % (self.ctrlMixingMatrix,))
+        self.ctrl = system.Control(self.ctrlInputMatrix, self.size, options=self.ctrlOptions)
+        # self.ctrl_old = system.Control(self.ctrlInputMatrix, self.size, options=self.ctrlOptions)
+
+        print("ctrlInputMatrix: %s\n\n" % (self.ctrlInputMatrix,))
+        # print("ctrlInputMatrix: %s\n" % (ctrlInputMatrix,))
 
 
     def log(self,message=""):
@@ -403,6 +462,37 @@ class ExperimentRunner():
     #     self.log("Input Estimates saved at \"{}\"".format(input_estimates_file_path))
 
 
+    def compute_eta2(self):
+      """
+        Compute eta2_magnitude depending on the system type.
+      """
+      print("Computing eta2")
+      systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
+
+      if self.systemtype in ['CyclicHadamard', 'CyclicGramSchmidt']:
+        eta2 = np.sum(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR))**2))
+        self.log("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(eta2))
+        return eta2
+
+      elif self.systemtype in ['ParallelIntegratorChain', 'FullyParallelSystem']:
+        eta2 = np.max(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR))**2))
+        self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(eta2))
+        return eta2
+
+      else:
+        raise Exception("Invalid system type: '{}'".format(self.systemtype))
+
+    def compute_rho(self):
+      """
+        Limit the low frequency gain of the system at
+        approximately the thermal noise level
+      """
+      if self.leakyIntegrators and self.sigma2_thermal > 0:
+        return (self.beta/((self.sigma2_thermal)**(-1/(self.N))))
+      else:
+        return 0
+
+
     def saveAll(self):
       params = self.getParams()
       params_string = ''
@@ -423,16 +513,20 @@ class ExperimentRunner():
         t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         self.sim_start_time = time.time()
 
-        self.simulation_options = {'noise':[{'std':self.sigma2_thermal, 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i]}  for i in range(self.M * self.N)],
-                                   'numberOfAdditionalPoints': 0
+        self.simulation_options = {'noise':[{'std':self.sigma2_thermal, 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)],
+                                   'numberOfAdditionalPoints': 4
                                    #'jitter':{'range':self.sampling_period*1e-3}
                                    }
-        
         initalState = (2*np.random.rand(self.N*self.M) - np.ones(self.N*self.M))*1e-3
+        print("Initial state: ", initalState)
         # for k in range(self.N):
         #   initalState[k*self.M:self.M*(k+1)] = np.ones(self.M) * np.random.randint(2) * 2. - 1.
         sim = simulator.Simulator(self.sys, self.ctrl, options=self.simulation_options, initalState=initalState)
+        # sim_old = simulator.Simulator(self.sys, self.ctrl_old, options=self.simulation_options, initalState=initalState)
+        # print("\n#################\nNew simulator")
         self.result = sim.simulate(t, self.input_signals)
+        # print("\n#################\nOld simulator")
+        # self.result_old = sim_old.simulate_old(t, self.input_signals)
 
         self.sim_run_time = time.time() - self.sim_start_time
         self.log(self.result['log'])
@@ -447,11 +541,13 @@ class ExperimentRunner():
         self.reconstruction_options = {'eta2':self.eta2,
                                        'sigmaU2':[1.]*self.L,
                                        'noise':[{'std':self.sigma2_reconst,
-                                                 'steeringVector': self.beta*np.eye(self.N * self.M)[:,i], 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]}
+                                                 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta, 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]}
         self.reconstruction = reconstruction.WienerFilter(t, self.sys, self.input_signals, self.reconstruction_options)
         tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
+        # tmp_estimates_old, recon_log_old = self.reconstruction.filter(self.ctrl_old)
 
         self.input_estimates = tmp_estimates[self.border:-self.border]
+        # self.input_estimates_old = tmp_estimates_old[self.border:-self.border]
         self.recon_run_time = time.time() - recon_time_start
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
@@ -499,7 +595,9 @@ def main(experiment_id,
          input_phase=0,
          num_periods_in_simulation=20,
          controller='subspaceController',
-         bitsPerControl=1):
+         bitsPerControl=1,
+         leaky=False,
+         dither=False):
     
     runner = ExperimentRunner(experiment_id=experiment_id,
                               data_dir=DATA_STORAGE_PATH,
@@ -519,7 +617,9 @@ def main(experiment_id,
                               sigma2_reconst=sigma2_reconst,
                               num_periods_in_simulation=num_periods_in_simulation,
                               controller=controller,
-                              bitsPerControl=bitsPerControl)
+                              bitsPerControl=bitsPerControl,
+                              leaky=leaky,
+                              dither=dither)
 
     runner.run_simulation()
     runner.run_reconstruction()
@@ -557,6 +657,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("-systemtype", type=str, default="ParallelIntegratorChain")
     # arg_parser.add_argument("-sig_dim", "--primary_signal_dimension", type=int, default=0)
     arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int)#, default=20)
+    arg_parser.add_argument("-leaky", type=bool, default=False)
+    arg_parser.add_argument("-dither", type=bool, default=False)
 
     args = vars(arg_parser.parse_args())
 
