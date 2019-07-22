@@ -66,17 +66,34 @@ class Simulator(object):
 
         # for timeInstance in tnew[1:]:
 
-        sampling_grid_remaining = np.copy(sampling_grid)
+        sampling_grid_remaining = np.copy(sampling_grid[1:])
+        # call_counter = 0
+        # t_old = 0
+        # reevaluation_counter = 0
         def f(x, tau):
             nonlocal sampling_grid_remaining, current_sample, num_samples
             """
             Compute the system derivative considering state control and input.
             """ 
+            # call_counter += 1
+
+            # if t_old == tau and call_counter > 2:
+            #     reevaluation_counter +=1
+            # t_old = tau
+
+            hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
+            control = self.control.fun(tau)
+            if tau == 0:
+                print("Control Decision at t=0: {}".format(control))
+            input = np.zeros_like(hom)
+            if inputs:
+                for signal in inputs:
+                    input += signal.fun(tau)
+
             if tau in sampling_grid_remaining:
                 current_sample += 1
                 # Update control descisions
                 self.control.update(x)
-                # print("Control Updated\t", np.abs((tau-tau_old) - h))
                 sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
                 # Print progress every 1e4 samples
                 try:
@@ -85,14 +102,8 @@ class Simulator(object):
                 except ZeroDivisionError:
                     pass
 
-            hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
-            control = self.control.fun(tau)
-            input = np.zeros_like(hom)
-            if inputs:
-                for signal in inputs:
-                    input += signal.fun(tau)
-
             return hom + control + input
+
         if "noise" in self.options:
             print("NOISE")
              # Shock Noise
@@ -112,8 +123,16 @@ class Simulator(object):
             # sampling grid by linearly interpolating between sampling times
             if 'numberOfAdditionalPoints' in self.options and self.options['numberOfAdditionalPoints'] > 0:
                 numberOfAdditionalPoints = self.options["numberOfAdditionalPoints"]
-                temp = np.zeros((sampling_grid.size-1) * (1+numberOfAdditionalPoints) + 1)
+                temp = np.zeros((sampling_grid.size-1) * numberOfAdditionalPoints + sampling_grid.size)
                 temp[::(1+numberOfAdditionalPoints)] = sampling_grid
+
+                # My attempt at mimicking exactly the behaviour of the old simulator, where each
+                # sampling time t_1, ..., (sampling_grid.size-1) is evaluated twice, because of
+                # how it's implemented with the for loop. However, sdeint doesn't allow unequal time-steps
+
+                # temp = np.zeros((sampling_grid.size-1) * numberOfAdditionalPoints + sampling_grid.size)
+                # for index in range(sampling_grid.size-1):
+                #     temp = np.concatenate((temp,np.linspace(sampling_grid[index],sampling_grid[index+1],numberOfAdditionalPoints+2)))
 
                 for index in range(sampling_grid.size-1):
                     temp[index * (numberOfAdditionalPoints+1) + 1: (index + 1) * (numberOfAdditionalPoints+1)] = np.linspace(sampling_grid[index],sampling_grid[index+1],numberOfAdditionalPoints+2)[1:-1]
@@ -123,7 +142,7 @@ class Simulator(object):
                 numberOfAdditionalPoints = 0
 
             t_start = time.time()
-            self.state = np.transpose(sdeint.itoint(f, g, y0=np.zeros_like(self.state), tspan=simulation_grid))[:, ::(1+numberOfAdditionalPoints)]
+            self.state = np.transpose(sdeint.itoint(f, g, y0=self.state, tspan=simulation_grid))[:, ::(1+numberOfAdditionalPoints)]
             runtime = time.time() - t_start
             # print("\n################\n")
             # print("Runtime: %.3f" % runtime)
@@ -184,7 +203,8 @@ class Simulator(object):
             above = self.state > bound
             below = self.state < -bound
 
-            oob_states = np.arange(self.system.order)[np.logical_or(above,below)]
+            oob_states = np.repeat(np.arange(self.system.order).reshape(-1,1),
+                                   self.state.shape[1],axis=1)[np.logical_or(above,below)]
             if any(oob_states):
                 # self.log("STATE BOUND EXCEEDED! Sample #: {}".format(current_sample))
                 # self.log("X_{} = {}".format(oob_states, self.state[oob_states]))
@@ -194,7 +214,8 @@ class Simulator(object):
 
         # print(self.state)
         
-
+        # print("Number of reevaluations of f(x,t) = {}".format(reevaluation_counter))
+        # print("New simulator number of calls to f(x,t) = {}".format(call_counter))
         # Return simulation object
         return {
             't': sampling_grid,
@@ -206,6 +227,140 @@ class Simulator(object):
             'log': self.logstr,
             'num_oob': self.num_oob
         }
+
+
+    def simulate_old(self, t, inputs=None):
+        """
+        Old simulation implementation
+        """
+
+        outputDimension = self.system.outputOrder
+        if outputDimension:
+            output = np.zeros((t.size, outputDimension))
+
+        t0 = t[0]
+        index = 0
+        tnew = t
+
+        current_sample = 0
+        num_samples = len(t)
+
+        if 'jitter' in self.options:
+            jitter_range = self.options['jitter']['range']
+            if jitter_range > (t[1] - t[0])/2.:
+                raise "Too large jitter range. Time steps could change order"
+            tnew = t + (np.random.rand(t.size) - 0.5) * jitter_range
+            print("With Jitter!")
+            # print(t)
+            # print(tnew)
+
+
+        for timeInstance in tnew[1:]:
+            # Store observations
+            if outputDimension:
+                output[index, :] = self.system.output(self.state)
+                index += 1
+
+            def f(x, t):
+                """
+                Compute the system derivative considering state control and input.
+                """
+                hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
+                control = self.control.fun(t)
+                if t == 0:
+                    print("Control Decision at t=0: {}".format(control))
+                input = np.zeros_like(hom)
+                if inputs:
+                    for signal in inputs:
+                        input += signal.fun(timeInstance)
+
+                return hom + control + input
+            if "noise" in self.options:
+                 # Shock Noise
+                noise_state = np.zeros((self.system.order, len(self.options["noise"])))
+                for i, noiseSource in enumerate(self.options['noise']):
+                    # print(noiseSource['std'])
+                    if noiseSource['std'] > 0:
+                        # std = np.sqrt(noiseSource["std"] ** 2 * (timeInstance - t0)) * noiseSource["steeringVector"]
+                        std = noiseSource["std"] * noiseSource["steeringVector"]
+                        noise_state[:, i]= std
+                        # noise_state += (np.random.rand() - 0.5 ) * 2 * std
+                def g(x, t):
+                    return noise_state
+
+            else:
+                def g(x,t):
+                    return np.zeros((self.system.order, 1))
+
+            # Solve ordinary differential equation
+            # self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=100, rtol=1e-13, hmin=1e-12)[-1, :]
+            tspace = np.linspace(t0, timeInstance, 10)
+            self.state = sdeint.itoint(f, g, self.state, tspace)[-1, :]
+            # If thermal noise should be simulated
+            # if "noise" in self.options:
+
+                # # Shock Noise
+                # noise_state = np.zeros(self.system.order)
+                # for noiseSource in self.options['noise']:
+                #     # print(noiseSource['std'])
+                #     if noiseSource['std'] > 0:
+                #         # std = np.sqrt(noiseSource["std"] ** 2 * (timeInstance - t0)) * noiseSource["steeringVector"]
+                #         std = noiseSource["std"] * noiseSource["steeringVector"]
+                #         noise_state += np.random.randn() * std
+                #         # noise_state += (np.random.rand() - 0.5 ) * 2 * std
+                # self.state += noise_state
+
+                # # Thermal Noise Simulation
+                # for noiseSource in self.options['noise']:
+                #     if noiseSource['std'] > 0:
+                #         def noiseDerivative(x, t):
+                #             hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
+                #             noise = np.random.randn() * noiseSource["std"] * noiseSource["steeringVector"]
+                #             return hom + noise
+                #         noise_state = odeint(noiseDerivative, np.zeros_like(self.state), np.array([t0, timeInstance]))[-1, :]
+                #         # print("Noise state %s" %noise_state)
+                #         # print("state before ", self.state)
+                #         self.state += noise_state
+                #         # print("noise ", noise_state)
+                #         # print("state after ", self.state)
+
+            # Increase time
+            t0 = timeInstance
+            # Update control descisions
+            # print(self.state)
+
+            # Clip if state is out of bound
+            if False:
+                bound = 1.
+                above = self.state > bound
+                below = self.state < -bound
+
+                self.state[above] = bound
+                self.state[below] = -bound
+
+            # print(self.state)
+            self.control.update(self.state)
+
+            current_sample += 1
+
+            try:
+                if current_sample % (num_samples//1e4) == 0:
+                    print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+            except ZeroDivisionError:
+                pass
+
+        # Return simulation object
+        return {
+            't': t,
+            'control': self.control,
+            'output': output,
+            'system': self.system,
+            'state': self.state,
+            'options': self.options,
+            'log': self.logstr,
+            'num_oob': self.num_oob
+        }
+
 
 
 # class autoControlSimulator(object):
