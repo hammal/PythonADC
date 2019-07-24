@@ -205,6 +205,8 @@ class WienerFilter(object):
         if 'mismatch' in options:
             print("Mismatch Experiment: Reconstruction with nominal values")
             self.mismatch = True
+        else:
+            self.mismatch = False
 
         # Solve care
         # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
