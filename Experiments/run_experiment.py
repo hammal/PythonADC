@@ -55,7 +55,8 @@ class ExperimentRunner():
                  controller='subspaceController',
                  bitsPerControl=1,
                  leaky=False,
-                 dither=False):
+                 dither=False,
+                 mismatch=False):
 
         print("Initializing Experiment | ID: %s" % experiment_id)
         self.experiment_id = experiment_id
@@ -92,7 +93,12 @@ class ExperimentRunner():
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True)
 
-        self.robustness = [0]#{'controlInputMatrix':0.01}
+        if mismatch:
+          self.mismatch = True
+          self.robustness = {'controlInputMatrix':0.01}
+        else:
+          self.mismatch = False
+          self.robustness = []
 
         #################################################
         #     System and input signal specifications    #
@@ -120,10 +126,9 @@ class ExperimentRunner():
             print("frequency_{} = {}".format(i, allowed_signal_frequencies[i]))
 
         self.all_input_signal_amplitudes[self.primary_signal_dimension] = self.input_amplitude
+        self.A = np.zeros((self.N*self.M, self.N*self.M))
 
         if self.systemtype == "ParallelIntegratorChain":
-
-            self.A = np.zeros((self.N*self.M, self.N*self.M))
             mixingPi = np.zeros((self.N-1, self.M, self.M))
             
             if N > 1:
@@ -131,18 +136,18 @@ class ExperimentRunner():
                 # only one input signal => We scale up the input vector by sqrt(M)
                 if L == 1:
                     for k in range(N-1):
-                        mixingPi[k] = self.beta * np.sqrt(M) * (np.outer(H[:,0],H[:,0]))
+                        mixingPi[k] = self.beta * np.sqrt(self.M) * (np.outer(self.H[:,0],self.H[:,0]))
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 # L=M means M input signals
                 elif L == M:
                     for k in range(N-1):
-                        mixingPi[k] = self.beta * np.sqrt(M) * np.eye(M)
+                        mixingPi[k] = self.beta * np.sqrt(self.M) * np.eye(self.M)
                         self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 else:
-                    for k in range(N-1):
-                        mixingPi[k] = self.beta * np.sqrt(M/L) * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.L)))
-                        self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
-                    # raise NotImplemented
+                    # for k in range(N-1):
+                    #     mixingPi[k] = self.beta * np.sqrt(M/L) * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.L)))
+                    #     self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
+                    raise NotImplemented
             else:
               mixingPi = [np.zeros((M,M))]
 
@@ -173,12 +178,6 @@ class ExperimentRunner():
                                                      steeringVector=vector))
                 print(f'b_{i} = {self.input_signals[i].steeringVector}')
             self.input_signals = tuple(self.input_signals)
-
-            self.c = np.eye(self.N * self.M)
-            self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
-
-            self.eta2_magnitude = self.compute_eta2()
-            print("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(self.eta2_magnitude))
         elif self.systemtype == "CyclicHadamard":
             # [   0                                mixingPi_1]
             # [mixingPi_2                              0     ]
@@ -192,7 +191,6 @@ class ExperimentRunner():
 
             # mixingPi_i = beta*(sqrt(M) / M)(  sum(h_j, h_j.T) for j != i  )
 
-            self.A = np.zeros((self.N*self.M, self.N*self.M))
             mixingPi = np.zeros((self.N, self.M, self.M))
 
             if N > 1:
@@ -240,17 +238,9 @@ class ExperimentRunner():
                                                    frequency=self.all_input_signal_frequencies[k],
                                                    phase=self.input_phase,# + 2*np.pi*np.random.rand(),
                                                    steeringVector=vector))
-
-            self.c = np.eye(self.N * self.M)
-            self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
-    
-            # print("sum( |G(0)b|^2 ) = {}".format(np.sum(np.abs(systemResponse(0)))))
-            self.eta2_magnitude = self.compute_eta2()
-            print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
         elif self.systemtype == "FullyParallelSystem":
-            self.A = np.zeros((self.N*self.M, self.N*self.M))
             for k in range(N-1):
-              self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = self.beta * np.eye(M)
+              self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = self.beta * np.eye(self.M)
 
             self.rho = self.compute_rho()
             self.A -= np.eye(N*M)*self.rho
@@ -264,13 +254,6 @@ class ExperimentRunner():
                                                  steeringVector=vector))
             print(f'b_{i} = {self.input_signals[i].steeringVector}')
             self.input_signals = tuple(self.input_signals)
-
-
-            self.c = np.eye(self.N * self.M)
-            self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
-
-            self.eta2_magnitude = compute_eta2()
-            print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
         elif self.systemtype == "CyclicGramSchmidt":
             # [   0                                mixingPi_1]
             # [mixingPi_2                              0     ]
@@ -281,10 +264,6 @@ class ExperimentRunner():
             # [                                        0     ]
             # [   0                        mixingPi_N  0     ]
 
-
-            # mixingPi_i = beta*(sqrt(M) / M)(  sum(h_j, h_j.T) for j != i  )
-
-            self.A = np.zeros((self.N*self.M, self.N*self.M))
             mixingPi = np.zeros((self.N, self.M, self.M))
 
             self.GramSchmidtBasis = gram_schmidt(np.random.randn(self.M,self.M))
@@ -325,15 +304,14 @@ class ExperimentRunner():
 
             else:
               pass
-
-            self.c = np.eye(self.N * self.M)
-            self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
-
-            self.eta2_magnitude = self.compute_eta2()
-            print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
         else:
             raise Exception("Invalid system type: '{}'".format(self.systemtype))
 
+        self.c = np.eye(self.N * self.M)
+        self.sys = system.System(A=self.A, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
+
+        self.eta2_magnitude = self.compute_eta2()
+        print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
         print("A = {}".format(self.A))
 
         #################################################
@@ -354,6 +332,7 @@ class ExperimentRunner():
             if L==1:
               for i in range(N):
                 self.ctrlInputMatrix[i*M:(i+1)*M,i] = - np.sqrt(self.M) * self.beta * self.H[:,0]
+              self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
             else:
               raise NotImplemented
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
@@ -378,12 +357,18 @@ class ExperimentRunner():
               self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - self.beta * self.H.transpose()
 
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+            self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
 
-            if 'controlInputMatrix' in self.robustness:
-              print("Control Input Matrix has +/- {}% error".format(self.robustness['controlInputMatrix']*100))
-              ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.robustness['controlInputMatrix']
+            if self.mismatch and 'controlInputMatrix' in self.robustness:
+              # ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.robustness['controlInputMatrix']
+              ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+              faulty_component = self.random_coordinate(self.M)
+              print(f"Single faulty component: {faulty_component}")
+              ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.robustness['controlInputMatrix']
+              # This is an entire faulty module: ctrlMismatch[:self.ctrlInputMatrix.shape[0], :self.ctrlInputMatrix.shape[1]]
+
               self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
-               # np.dot(tmp, np.diag(1/(np.linalg.norm(tmp, ord=2, axis=0)))).transpose()
+              print(self.ctrlInputMatrix)
 
             # for k in range(self.N):
             #   self.ctrlMixingMatrix[k*self.M:(k+1)*self.M, k*(self.M-1):(k+1)*(self.M-1)] = - beta * np.delete(H,k, axis=1)
@@ -395,17 +380,28 @@ class ExperimentRunner():
               self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - self.beta * self.GramSchmidtBasis.transpose()
 
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
-
         elif controller == 'diagonalController':
             self.ctrlInputMatrix = np.zeros((N*M,N*M))
             if dither:
               self.ctrlInputMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * self.beta*1e-3
-            self.ctrlInputMatrix += - self.kappa * self.beta * np.eye(self.N * self.M)
+            for i in range(self.M*self.N):
+              self.ctrlInputMatrix[i,i] = - self.kappa * self.beta
+            self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
+
+            if self.mismatch and 'controlInputMatrix' in self.robustness:
+              coordinate = np.random.randint(self.M)
+              faulty_component = (coordinate,coordinate)
+              print(f"Single faulty component: {faulty_component}")
+              ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+              ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.robustness['controlInputMatrix']
+              self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
+
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
 
         self.ctrlOptions = {
             'bitsPerControl':bitsPerControl,
             'projectionMatrix':self.ctrlObservationMatrix,
+            'nominalCtrlInputMatrix':self.nominalCtrlInputMatrix,
             'bound':1
         }
 
@@ -461,12 +457,14 @@ class ExperimentRunner():
     #         pkl.dump(self.input_estimates, outfile)
     #     self.log("Input Estimates saved at \"{}\"".format(input_estimates_file_path))
 
+    def random_coordinate(self,m):
+      return (np.random.randint(m), np.random.randint(m))
 
     def compute_eta2(self):
       """
         Compute eta2_magnitude depending on the system type.
       """
-      print("Computing eta2")
+      print(f"Computing eta2 for {self.systemtype}")
       systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
 
       if self.systemtype in ['CyclicHadamard', 'CyclicGramSchmidt']:
@@ -541,7 +539,10 @@ class ExperimentRunner():
         self.reconstruction_options = {'eta2':self.eta2,
                                        'sigmaU2':[1.]*self.L,
                                        'noise':[{'std':self.sigma2_reconst,
-                                                 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta, 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]}
+                                                 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta,
+                                                 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)],
+                                       'mismatch':self.mismatch}
+
         self.reconstruction = reconstruction.WienerFilter(t, self.sys, self.input_signals, self.reconstruction_options)
         tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
         # tmp_estimates_old, recon_log_old = self.reconstruction.filter(self.ctrl_old)

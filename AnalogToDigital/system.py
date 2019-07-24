@@ -209,6 +209,10 @@ class Control(object):
         else:
             self.projectionMatrix = np.dot(self.mixingMatrix, np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0)))).transpose()
 
+        if 'nominalCtrlInputMatrix' in options:
+            self.nominalCtrlInputMatrix = options['nominalCtrlInputMatrix']
+        else:
+            self.nominalCtrlInputMatrix = mixingMatrix
 
     def __getitem__(self, item):
         """

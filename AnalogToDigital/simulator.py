@@ -33,6 +33,12 @@ class Simulator(object):
         self.log("Simulation started!")
         self.num_oob = 0
 
+        if np.allclose(control.mixingMatrix,control.nominalCtrlInputMatrix):
+            print(f"Simulating with ctrlInputMatrix: {control.mixingMatrix}")
+        else:
+            print((f"Simulating with faulty components\n\
+                    CtrlInputMatrix = {control.mixingMatrix}\n\
+                    nominalCtrlInputMatrix = {control.nominalCtrlInputMatrix}"))
 
     def log(self,message=""):
         tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)

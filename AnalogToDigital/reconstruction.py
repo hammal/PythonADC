@@ -202,6 +202,9 @@ class WienerFilter(object):
         else:
             self.sigmaU2 = np.ones(len(inputs), dtype=np.float64)
         
+        if 'mismatch' in options:
+            print("Mismatch Experiment: Reconstruction with nominal values")
+            self.mismatch = True
 
         # Solve care
         # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
@@ -285,8 +288,8 @@ class WienerFilter(object):
                 self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
                 self.Ob = - np.dot(self.Bb, self.BackwardOffsetMatrix * control.references[0]).flatten()
             else:
-                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, np.dot(control.mixingMatrix, control.references)))
-                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, np.dot(control.mixingMatrix, control.references)))
+                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, np.dot(control.nominalCtrlInputMatrix, control.references)))
+                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, np.dot(control.nominalCtrlInputMatrix, control.references)))
             # else:
             #     self.Of = np.zeros(self.order)
             #     self.Ob = np.zeros(self.order)
@@ -295,8 +298,13 @@ class WienerFilter(object):
             print(self.Of, self.Ob)
 
             # Compute Control Mixing contributions
-            self.Bf = np.dot(self.Bf, self.mixingMatrix)
-            self.Bb = np.dot(self.Bb, self.mixingMatrix)
+
+            if self.mismatch:
+                self.Bf = np.dot(self.Bf, control.nominalCtrlInputMatrix)
+                self.Bb = np.dot(self.Bb, control.nominalCtrlInputMatrix)
+            else:
+                self.Bf = np.dot(self.Bf, self.mixingMatrix)
+                self.Bb = np.dot(self.Bb, self.mixingMatrix)
 
                 
         else:
@@ -320,6 +328,8 @@ class WienerFilter(object):
         # If not initial state use the control sequence and assume at rails 1 V 
         if initialState:
             mf[:,0] = initialState
+        elif self.mismatch:
+            mf[:,0] = np.array(np.dot(control.nominalCtrlInputMatrix, control[0]))
         else:
             mf[:,0] = np.array(np.dot(control.mixingMatrix, control[0]))
 
