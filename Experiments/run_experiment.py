@@ -227,6 +227,7 @@ class ExperimentRunner():
                                                    frequency=self.input_frequency,
                                                    phase=self.input_phase,
                                                    steeringVector=vector))
+              print(f'b_{i} = {self.input_signals[i].steeringVector}')
 
             elif self.L == self.M:
               for k in range(self.L):
@@ -336,7 +337,6 @@ class ExperimentRunner():
             else:
               raise NotImplemented
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
-
           elif self.systemtype == 'CyclicHadamard':
             """ Control mixing matrix for the cyclic parallel system:
                         [  H    0    ...      0 ]
@@ -346,7 +346,6 @@ class ExperimentRunner():
                         [  .               .  0 ]
                         [  0                  H ]
 
-                # Xi_k eqdef  [pi_1^T ... pi_{k-1}^T pi_{k+1}^T ... pi_M^T]^T
             """
 
             self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N * self.M))
@@ -368,7 +367,6 @@ class ExperimentRunner():
               # This is an entire faulty module: ctrlMismatch[:self.ctrlInputMatrix.shape[0], :self.ctrlInputMatrix.shape[1]]
 
               self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
-              print(self.ctrlInputMatrix)
 
             # for k in range(self.N):
             #   self.ctrlMixingMatrix[k*self.M:(k+1)*self.M, k*(self.M-1):(k+1)*(self.M-1)] = - beta * np.delete(H,k, axis=1)
@@ -460,20 +458,54 @@ class ExperimentRunner():
     def random_coordinate(self,m):
       return (np.random.randint(m), np.random.randint(m))
 
+
+    # def plotFrequencyResponse(self,f,ax):
+    #   fcrit = 1./(2.*self.sampling_period*self.OSR)
+    #   freqs = np.linspace(1e-1, fcrit+1e3 ,5e3)
+    #   vals = [10*np.log10(np.linalg.norm(f(val))) for val in freqs]
+    #   ax.semilogx(freqs, vals, label=f.__name__)
+    #   ax.plot([fcrit, fcrit], [-20,0], label='f_crit')
+    #   ax.set_title(self.experiment_id)
+
+
     def compute_eta2(self):
       """
         Compute eta2_magnitude depending on the system type.
       """
+      import matplotlib.pyplot as plt
       print(f"Computing eta2 for {self.systemtype}")
       systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
 
+      # stf = lambda x: np.dot(np.dot(np.dot(self.sys.b.T,self.sys.frequencyResponse(x).conjugate().T),
+      #                         (np.linalg.pinv(eta2*np.eye(self.M*self.N) + np.outer(np.dot(self.sys.frequencyResponse(x),self.sys.b),np.dot(self.sys.b.T,self.sys.frequencyResponse(x).conjugate().T))))),
+      #                          np.dot(self.sys.frequencyResponse(x), self.sys.b))
+      # stf.__name__ = 'stf'
+      # ntf = lambda x: np.dot(np.dot(self.sys.b.T,self.sys.frequencyResponse(x).conjugate().T),
+      #                         (np.linalg.pinv(eta2*np.eye(self.M*self.N) + np.outer(np.dot(self.sys.frequencyResponse(x),self.sys.b),np.dot(self.sys.b.T,self.sys.frequencyResponse(x).conjugate().T)))))
+
+      # ntf.__name__ = 'ntf'
+
       if self.systemtype in ['CyclicHadamard', 'CyclicGramSchmidt']:
-        eta2 = np.sum(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR))**2))
+        eta2 = np.sum(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR)))**2)
+        # print(f"eta2 = {10*np.log10(eta2)}")
+        # fig,ax = plt.subplots()
+        # self.plotFrequencyResponse(stf,ax)
+        # self.plotFrequencyResponse(ntf,ax)
+        # plt.legend()
+        # plt.show()
+        # exit()
         self.log("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(eta2))
         return eta2
 
       elif self.systemtype in ['ParallelIntegratorChain', 'FullyParallelSystem']:
-        eta2 = np.max(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR))**2))
+        eta2 = np.max(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR)))**2)
+        # print(f"eta2 = {10*np.log10(eta2)}")
+        # fig,ax = plt.subplots()
+        # self.plotFrequencyResponse(stf,ax)
+        # self.plotFrequencyResponse(ntf,ax)
+        # plt.legend()
+        # plt.show()
+        # exit()
         self.log("eta2_magnitude set to max(|G(s)b|^2) = {:.5e}".format(eta2))
         return eta2
 
