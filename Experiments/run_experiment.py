@@ -56,7 +56,7 @@ class ExperimentRunner():
                  bitsPerControl=1,
                  leaky=False,
                  dither=False,
-                 mismatch=False):
+                 mismatch=''):
 
         print("Initializing Experiment | ID: %s" % experiment_id)
         self.experiment_id = experiment_id
@@ -93,12 +93,13 @@ class ExperimentRunner():
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True)
 
+        self.mismatch = {}
+
         if mismatch:
-          self.mismatch = True
-          self.robustness = {'controlInputMatrix':0.01}
-        else:
-          self.mismatch = False
-          self.robustness = []
+          self.mismatch[mismatch] = {'controlInputMatrix':0.01}
+        # {'element': {'controlInputMatrix':0.01},
+        #  'module': {'controlInputMatrix':0.01},
+        #  'system': {'controlInputMatrix':0.01}}
 
         #################################################
         #     System and input signal specifications    #
@@ -239,6 +240,7 @@ class ExperimentRunner():
                                                    frequency=self.all_input_signal_frequencies[k],
                                                    phase=self.input_phase,# + 2*np.pi*np.random.rand(),
                                                    steeringVector=vector))
+
         elif self.systemtype == "FullyParallelSystem":
             for k in range(N-1):
               self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = self.beta * np.eye(self.M)
@@ -246,14 +248,25 @@ class ExperimentRunner():
             self.rho = self.compute_rho()
             self.A -= np.eye(N*M)*self.rho
 
-            vector = np.zeros(self.M*self.N)
-            vector[0:self.M] = self.beta * np.ones(M)
-            self.input_signals.append(system.Sin(self.sampling_period,
-                                                 amplitude=self.all_input_signal_amplitudes[i],
-                                                 frequency=self.all_input_signal_frequencies[i],
-                                                 phase=self.input_phase,#+ (np.pi/2)*i,
-                                                 steeringVector=vector))
-            print(f'b_{i} = {self.input_signals[i].steeringVector}')
+            if self.L == 1:
+              vector = np.zeros(self.M*self.N)
+              vector[0:self.M] = self.beta * np.ones(M)
+              self.input_signals.append(system.Sin(self.sampling_period,
+                                                   amplitude=self.all_input_signal_amplitudes[i],
+                                                   frequency=self.all_input_signal_frequencies[i],
+                                                   phase=self.input_phase,#+ (np.pi/2)*i,
+                                                   steeringVector=vector))
+            elif self.L == self.M:
+              for i in range(self.L):
+                vector = np.zeros(self.M*self.N)
+                vector[i] = self.beta
+                self.input_signals.append(system.Sin(self.sampling_period,
+                                                     amplitude=self.all_input_signal_amplitudes[i],
+                                                     frequency=self.all_input_signal_frequencies[i],
+                                                     phase=self.input_phase,#+ (np.pi/2)*i,
+                                                     steeringVector=vector))
+
+                print(f'b_{i} = {self.input_signals[i].steeringVector}')
             self.input_signals = tuple(self.input_signals)
         elif self.systemtype == "CyclicGramSchmidt":
             # [   0                                mixingPi_1]
@@ -358,16 +371,6 @@ class ExperimentRunner():
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
             self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
 
-            if self.mismatch and 'controlInputMatrix' in self.robustness:
-              # ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.robustness['controlInputMatrix']
-              ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
-              faulty_component = self.random_coordinate(self.M)
-              print(f"Single faulty component: {faulty_component}")
-              ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.robustness['controlInputMatrix']
-              # This is an entire faulty module: ctrlMismatch[:self.ctrlInputMatrix.shape[0], :self.ctrlInputMatrix.shape[1]]
-
-              self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
-
             # for k in range(self.N):
             #   self.ctrlMixingMatrix[k*self.M:(k+1)*self.M, k*(self.M-1):(k+1)*(self.M-1)] = - beta * np.delete(H,k, axis=1)
           elif self.systemtype == 'CyclicGramSchmidt':
@@ -378,6 +381,22 @@ class ExperimentRunner():
               self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - self.beta * self.GramSchmidtBasis.transpose()
 
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+
+          ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+          for key in self.mismatch.keys():
+              if key == 'element':
+                faulty_component = self.random_coordinate(self.M)
+                print(f"Single faulty component: {faulty_component}")
+                ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch[key]['controlInputMatrix']
+
+              elif key == 'module':
+                print(f"First module faulty")
+                ctrlMismatch[:self.M, :self.M] = (np.random.randint(2,size=(self.M,self.M))*2-1)*self.mismatch[key]['controlInputMatrix']
+
+              elif key =='system':
+                print("Entire system faulty")
+                ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch[key]['controlInputMatrix']
+
         elif controller == 'diagonalController':
             self.ctrlInputMatrix = np.zeros((N*M,N*M))
             if dither:
@@ -386,15 +405,33 @@ class ExperimentRunner():
               self.ctrlInputMatrix[i,i] = - self.kappa * self.beta
             self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
 
-            if self.mismatch and 'controlInputMatrix' in self.robustness:
-              coordinate = np.random.randint(self.M)
-              faulty_component = (coordinate,coordinate)
-              print(f"Single faulty component: {faulty_component}")
-              ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
-              ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.robustness['controlInputMatrix']
-              self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
+            ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+            for key in self.mismatch.keys():
+              if key == 'element':
+                coordinate = np.random.randint(self.M)
+                faulty_component = (coordinate, coordinate)
+                print(f"Single faulty component: ({faulty_component})")
+                ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch[key]['controlInputMatrix']
 
-            self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+              elif key == 'module':
+                print(f"First module faulty")
+                for i in range(self.M):
+                  ctrlMismatch[i,i] = (np.random.randint(2)*2-1)*self.mismatch[key]['controlInputMatrix']
+
+              elif key =='system':
+                print("Entire system faulty")
+                ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch[key]['controlInputMatrix']
+            # if self.mismatch and 'controlInputMatrix' in self.robustness:
+            #   coordinate = np.random.randint(self.M)
+            #   faulty_component = (coordinate,coordinate)
+            #   print(f"Single faulty component: {faulty_component}")
+            #   ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+            #   ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.robustness['controlInputMatrix']
+            #   self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
+
+            self.ctrlObservationMatrix = np.dot(self.nominalCtrlInputMatrix, np.diag(1/(np.linalg.norm(self.nominalCtrlInputMatrix, ord=2, axis=0)))).transpose()
+
+        self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
 
         self.ctrlOptions = {
             'bitsPerControl':bitsPerControl,
@@ -406,8 +443,6 @@ class ExperimentRunner():
         self.ctrl = system.Control(self.ctrlInputMatrix, self.size, options=self.ctrlOptions)
         # self.ctrl_old = system.Control(self.ctrlInputMatrix, self.size, options=self.ctrlOptions)
 
-        print("ctrlInputMatrix: %s\n\n" % (self.ctrlInputMatrix,))
-        # print("ctrlInputMatrix: %s\n" % (ctrlInputMatrix,))
 
 
     def log(self,message=""):
@@ -472,7 +507,7 @@ class ExperimentRunner():
       """
         Compute eta2_magnitude depending on the system type.
       """
-      import matplotlib.pyplot as plt
+      # import matplotlib.pyplot as plt
       print(f"Computing eta2 for {self.systemtype}")
       systemResponse = lambda f: np.dot(self.sys.frequencyResponse(f), self.sys.b)
 
@@ -498,7 +533,7 @@ class ExperimentRunner():
         return eta2
 
       elif self.systemtype in ['ParallelIntegratorChain', 'FullyParallelSystem']:
-        eta2 = np.max(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR)))**2)
+        eta2 = np.sum(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR)))**2)
         # print(f"eta2 = {10*np.log10(eta2)}")
         # fig,ax = plt.subplots()
         # self.plotFrequencyResponse(stf,ax)
@@ -630,7 +665,8 @@ def main(experiment_id,
          controller='subspaceController',
          bitsPerControl=1,
          leaky=False,
-         dither=False):
+         dither=False,
+         mismatch=''):
     
     runner = ExperimentRunner(experiment_id=experiment_id,
                               data_dir=DATA_STORAGE_PATH,
@@ -652,7 +688,8 @@ def main(experiment_id,
                               controller=controller,
                               bitsPerControl=bitsPerControl,
                               leaky=leaky,
-                              dither=dither)
+                              dither=dither,
+                              mismatch=mismatch)
 
     runner.run_simulation()
     runner.run_reconstruction()
@@ -692,6 +729,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int)#, default=20)
     arg_parser.add_argument("-leaky", type=bool, default=False)
     arg_parser.add_argument("-dither", type=bool, default=False)
+    arg_parser.add_argument("-mismatch", type=str, default='')
 
     args = vars(arg_parser.parse_args())
 
