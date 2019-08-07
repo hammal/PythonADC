@@ -5,8 +5,7 @@ stages:
 image: continuumio/anaconda3:latest
 
 before_script:
-  - "./opt/conda/etc/profile.d/conda.sh && conda activate base"
-  - "conda install -y scipy"
+#   - "conda install -y scipy"
   - "pip install cvxopt"
   - "mkdir -p /root/.config/matplotlib"
   - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
