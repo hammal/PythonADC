@@ -5,11 +5,11 @@ stages:
 image: continuumio/anaconda3:latest
 
 before_script:
-  - "/bin/sh conda install -y scipy"
-  - "/bin/sh pip install cvxopt"
-  - "/bin/sh mkdir -p /root/.config/matplotlib"
-  - "/bin/sh echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
-  - "/bin/sh git clone https://github.com/mattja/sdeint.git; cd sdeint; python setup.py install; cd .."
+  - "conda install -y scipy"
+  - "pip install cvxopt"
+  - "mkdir -p /root/.config/matplotlib"
+  - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
+  - "git clone https://github.com/mattja/sdeint.git; cd sdeint; python setup.py install; cd .."
 
 
 testEvaluate:
