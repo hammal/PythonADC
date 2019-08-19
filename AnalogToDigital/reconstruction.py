@@ -202,7 +202,7 @@ class WienerFilter(object):
         else:
             self.sigmaU2 = np.ones(len(inputs), dtype=np.float64)
         
-        if 'mismatch' in options:
+        if 'mismatch' in options and options['mismatch'] != '':
             print("Mismatch Experiment: Reconstruction with nominal values")
             self.mismatch = True
         else:

@@ -103,7 +103,10 @@ class Noise(Input):
         return self.steeringVector * self.scalarFunction(t)
 
     def scalarFunction(self, t):
-        return  self.std * np.random.randn(t.size)
+        if isinstance(t, float):
+            return  self.std * np.random.randn(1)
+        else:
+            return  self.std * np.random.randn(t.size)
 
 class System(object):
 
