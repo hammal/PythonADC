@@ -11,7 +11,9 @@ def hadamardMatrix(n):
 M = 4
 
 def run(experiment_id, newInputVector, systemtype):
-    DATA_STORAGE_PATH = Path('./test_random_noise_directions')#'/home/olafurt/cyclic_vs_parallel_random_thermal_noise_directions')
+    DATA_STORAGE_PATH = Path('/home/olafurt/cyclic_vs_parallel_random_thermal_noise_directions')
+    if not DATA_STORAGE_PATH.exists():
+        DATA_STORAGE_PATH.mkdir(parents=True)
     M = 4
     N = 4
     L = 1
@@ -33,7 +35,7 @@ def run(experiment_id, newInputVector, systemtype):
     beta_hat = beta
     beta_tilde = beta
     nonuniformNoise = None
-    
+
     gaussian_random_matrix = np.random.randn(M*N,M*N)
     noise_basis = gram_schmidt(gaussian_random_matrix)
     # covariance_matrix_thermal = sum(np.outer(noise_basis[:,i],noise_basis[:,i]) for i in range(M*N))*(sigma_thermal**2)/(M*N)
@@ -81,7 +83,7 @@ input_ch = np.zeros_like(H[:,0])
 input_ch[0] = 1
 input_parallel = H[:,0]
 
-for i in range(1):
+for i in range(100):
   run(experiment_id=f'CyclicHadamard_{i}', newInputVector=input_ch, systemtype='CyclicHadamard')
-for i in range(1):
+for i in range(100):
   run(experiment_id=f'Parallel_{i}', newInputVector=input_parallel, systemtype='ParallelIntegratorChains')
