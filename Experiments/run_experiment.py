@@ -23,8 +23,8 @@ from gram_schmidt import gram_schmidt
 
 
 # Edit this path
-DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
-
+# DATA_STORAGE_PATH = Path('/itet-stor/olafurt/net_scratch/adc_data')
+DATA_STORAGE_PATH = Path('./unit_tests')
 
 def hadamardMatrix(n):
     return sp.linalg.hadamard(n)/np.sqrt(n)
@@ -36,27 +36,32 @@ class ExperimentRunner():
     def __init__(self,
                  experiment_id,
                  data_dir,
-                 M,
                  N,
-                 L,
-                 input_phase,
-                 input_amplitude,
+                 M=1,
+                 L=1,
+                 input_amplitude=1,
                  input_frequency=None,
+                 input_phase=0,
                  beta=6250,
                  sampling_period=8e-5,
                  primary_signal_dimension=0,
-                 systemtype='ParallelIntegratorChain',
+                 systemtype='ParallelIntegratorChains',
                  OSR=16,
                  eta2_magnitude=1,
                  kappa=1,
-                 sigma2_thermal=1e-6,
-                 sigma2_reconst=1e-6,
+                 sigma_thermal=1e-6,
+                 sigma_reconst=1e-6,
                  num_periods_in_simulation=100,
-                 controller='subspaceController',
+                 controller='diagonalController',
                  bitsPerControl=1,
                  leaky=False,
                  dither=False,
-                 mismatch=''):
+                 mismatch='',
+                 beta_hat=1562.5,
+                 beta_tilde=1562.5,
+                 newInputVector=np.ones(1),
+                 nonuniformNoise=False,
+                 options={}):
 
         print("Initializing Experiment | ID: %s" % experiment_id)
         self.experiment_id = experiment_id
@@ -73,11 +78,15 @@ class ExperimentRunner():
         self.systemtype = systemtype
         self.OSR = OSR
         self.kappa = kappa
-        self.sigma2_thermal = sigma2_thermal
-        self.sigma2_reconst = sigma2_reconst
+        self.sigma_thermal = sigma_thermal
+        self.sigma_reconst = sigma_reconst
         self.leakyIntegrators = leaky
         self.num_periods_in_simulation = num_periods_in_simulation
         self.size = round(num_periods_in_simulation/sampling_period)
+        self.nonuniformNoise = nonuniformNoise
+
+        self.beta_hat = beta_hat
+        self.beta_tilde = beta_tilde
 
         self.controller = controller
         self.bitsPerControl = bitsPerControl
@@ -99,6 +108,8 @@ class ExperimentRunner():
           affected, mismatchtype, mismatch_error = mismatch.split(',')
           self.mismatch[affected] = {mismatchtype: float(mismatch_error)}
 
+        self.newInputVector = newInputVector
+        self.options = options
         #################################################
         #     System and input signal specifications    #
         #################################################
@@ -111,6 +122,7 @@ class ExperimentRunner():
             self.input_frequency = 1./(self.sampling_period * 2 * self.OSR)
             self.log(f'Setting f_sig = f_s/(2*OSR) = {self.input_frequency}')
         self.H = hadamardMatrix(self.M)
+
 
         # Define input signals:
         self.input_signals = []
@@ -128,7 +140,8 @@ class ExperimentRunner():
         self.A_simulation = np.zeros((self.N*self.M, self.N*self.M))
         self.A_nominal = np.zeros((self.N*self.M, self.N*self.M))
 
-        if self.systemtype == "ParallelIntegratorChain":
+        if self.systemtype == "MixedIntegratorChains":
+            print("System Type: Mixed Integrator Chains")
             mixingPi = np.zeros((self.N-1, self.M, self.M))
             
             if N > 1:
@@ -137,12 +150,14 @@ class ExperimentRunner():
                 if L == 1:
                     for k in range(N-1):
                         mixingPi[k] = self.beta * np.sqrt(self.M) * (np.outer(self.H[:,0],self.H[:,0]))
-                        self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
+                        self.A_nominal[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
+                        self.A_simulation[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 # L=M means M input signals
                 elif L == M:
                     for k in range(N-1):
                         mixingPi[k] = self.beta * np.sqrt(self.M) * np.eye(self.M)
-                        self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
+                        self.A_nominal[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
+                        self.A_simulation[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k]
                 else:
                     # for k in range(N-1):
                     #     mixingPi[k] = self.beta * np.sqrt(M/L) * (sum(np.outer(H[:,i],H[:,i]) for i in range(self.L)))
@@ -154,7 +169,8 @@ class ExperimentRunner():
             # Limit the low frequency gain of the filter
             # at approximately the thermal noise level
             self.rho = self.compute_rho()
-            self.A -= np.eye(N*M)*self.rho
+            self.A_nominal -= np.eye(N*M)*self.rho
+            self.A_simulation -= np.eye(N*M)*self.rho
 
             # Define input steeringVectors
             if L == 1:
@@ -178,6 +194,7 @@ class ExperimentRunner():
                                                      steeringVector=vector))
                 print(f'b_{i} = {self.input_signals[i].steeringVector}')
         elif self.systemtype == "CyclicHadamard":
+            print("System Type: Cyclic Hadamard")
             # [   0                                mixingPi_1]
             # [mixingPi_2                              0     ]
             # [   0       mixingPi_3                   0     ]
@@ -194,8 +211,8 @@ class ExperimentRunner():
 
             if N > 1:
                 # Iterate just like before, down the first sub-diagonal, always summing over all but the k'th pi vector
-                for k in range(self.M):
-                    mixingPi[k] = self.beta * sum(np.outer(self.H[:,i],self.H[:,i]) for i in range(self.N) if i != k)
+                for k in range(self.N):
+                    mixingPi[k] = self.beta_tilde * sum(np.outer(self.H[:,i],self.H[:,i]) for i in range(self.M) if i != np.mod(k,M))
 
                 A_mismatch = np.zeros_like(mixingPi)
                 if 'A' in self.mismatch:
@@ -210,18 +227,19 @@ class ExperimentRunner():
                       print(A_mismatch[1])
                     elif key =='system':
                       for k in range(self.M):
-                        A_mismatch[k] = (np.random.randint(2,size=(mixingPi[0].shape))* 2 - 1)*self.mismatch['A']['system']
+                        A_mismatch[k] = np.random.randn(self.M,self.M) * self.mismatch['A']['system']
+                        #(np.random.randint(2,size=(mixingPi[0].shape))* 2 - 1)*self.mismatch['A']['system']
 
                 self.A_nominal[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0]
                 self.A_simulation[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0] + np.multiply(mixingPi[0],A_mismatch[0])                
-                for k in range(self.M-1):
+                for k in range(self.N-1):
                   self.A_nominal[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1]
                   self.A_simulation[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1] + np.multiply(mixingPi[k+1],A_mismatch[k+1])
 
-                vec = np.hstack((self.H[:,i] for i in np.append(np.arange(1,self.M),0)))
-                if np.any(np.abs(np.dot(self.A_nominal,vec))):
-                  print("Error in building cyclic system. A_nominal.dot(vec) != 0")
-                  print(np.dot(self.A_nominal,vec))
+                # vec = np.hstack((self.H[:,i] for i in np.append(np.arange(1,self.M),0)))
+                # if np.any(np.abs(np.dot(self.A_nominal,vec))):
+                #   print("Error in building cyclic system. A_nominal.dot(vec) != 0")
+                #   print(np.dot(self.A_nominal,vec))
             else:
               mixingPi = [np.zeros((M,M))]
 
@@ -233,9 +251,10 @@ class ExperimentRunner():
             # Define input signals:
             self.input_signals = []
             if self.L==1:
+              # self.newInputVector = vec#self.H[:,0] # CASE II
               vector = np.zeros(self.M*self.N)
-              for k in range(self.M):
-                vector[k*self.M:(k+1)*self.M] = self.beta * self.H[:,k]
+              for k in range(self.N):
+                vector[k*self.M:(k+1)*self.M] = self.beta_hat * np.dot(np.outer(self.H[:,np.mod(k,M)],self.H[:,np.mod(k,M)]),self.newInputVector)
 
               # self.input_signals.append(system.Constant(amplitude=self.input_amplitude,
               #                                           steeringVector=vector))
@@ -259,9 +278,11 @@ class ExperimentRunner():
             # noiseVector = np.zeros(self.M*self.N)
             # noiseVector[0] = mixingPi[0,0,0]
             # self.input_signals.append(system.Noise(standardDeviation=1e-4, steeringVector=noiseVector))
-        elif self.systemtype == "FullyParallelSystem":
+        elif self.systemtype == "ParallelIntegratorChains":
+            print("System Type: Parallel Integrator Chains")
             A_mismatch = np.zeros((self.N, self.M, self.M))
             if 'A' in self.mismatch:
+              print("Mismatch in A")
               for key in self.mismatch['A']:
                 if key == 'element':
                   faulty_component = np.random.randint(self.M)
@@ -272,12 +293,15 @@ class ExperimentRunner():
                   A_mismatch[1][:self.M, :self.M] = (np.random.randint(2,size=(self.M,self.M))*2-1)*self.mismatch['A']['module']
                   print(A_mismatch[1])
                 elif key =='system':
+                  print("System mismatch")
                   for k in range(self.N):
-                    A_mismatch[k] = (np.random.randint(2,size=(self.M,self.M))* 2 - 1)*self.mismatch['A']['system']
+                    A_mismatch[k] = np.random.randn(self.M,self.M) * self.mismatch['A']['system']
+                    #(np.random.randint(2,size=(self.M,self.M))* 2 - 1)*self.mismatch['A']['system']
 
             for k in range(N-1):
                 self.A_simulation[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = self.beta * np.eye(self.M) + np.multiply(self.beta*np.eye(self.M),A_mismatch[k])
                 self.A_nominal[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = self.beta * np.eye(self.M)
+
 
             self.rho = self.compute_rho()
             self.A_nominal -= np.eye(N*M)*self.rho
@@ -285,7 +309,7 @@ class ExperimentRunner():
 
             if self.L == 1:
               vector = np.zeros(self.M*self.N)
-              vector[0:self.M] = self.beta * np.ones(M)
+              vector[0:self.M] = self.beta_hat * self.newInputVector
               self.input_signals.append(system.Sin(self.sampling_period,
                                                    amplitude=self.all_input_signal_amplitudes[i],
                                                    frequency=self.all_input_signal_frequencies[i],
@@ -301,11 +325,12 @@ class ExperimentRunner():
                                                      phase=self.input_phase,#+ (np.pi/2)*i,
                                                      steeringVector=vector))
 
-                print(f'b_{i} = {self.input_signals[i].steeringVector}')
+            print(f'b_{i} = {self.input_signals[i].steeringVector}')
             # noiseVector = np.zeros(self.M*self.N)
             # noiseVector[0] = self.beta
             # self.input_signals.append(system.Noise(standardDeviation=1e-4, steeringVector=noiseVector))
         elif self.systemtype == "CyclicGramSchmidt":
+            print("System Type: Cyclic Gram-Schmidt")
             # [   0                                mixingPi_1]
             # [mixingPi_2                              0     ]
             # [   0       mixingPi_3                   0     ]
@@ -357,7 +382,8 @@ class ExperimentRunner():
             else:
               pass
         elif self.systemtype == 'StandardBasis':
-          # [   0                                mixingPi_1]
+            print("System Type: Cyclic Standard Basis")
+            # [   0                                mixingPi_1]
             # [mixingPi_2                              0     ]
             # [   0       mixingPi_3                   0     ]
             # [   .     .            .                 .     ]
@@ -393,13 +419,15 @@ class ExperimentRunner():
                       for k in range(self.M):
                         A_mismatch[k] = (np.random.randint(2,size=(mixingPi[0].shape))* 2 - 1)*self.mismatch['A']['system']
 
-                self.A[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0] + np.multiply(mixingPi[0],A_mismatch[0])
+                self.A_simulation[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0] + np.multiply(mixingPi[0],A_mismatch[0])
+                self.A_nominal[ 0 : self.M, -self.M : self.M*self.N] = mixingPi[0]
                 for k in range(self.M-1):
-                  self.A[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1] + np.multiply(mixingPi[k+1],A_mismatch[k+1])
+                  self.A_simulation[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1] + np.multiply(mixingPi[k+1],A_mismatch[k+1])
+                  self.A_nominal[(k+1)*self.M:(k+2)*self.M, (k)*self.M:(k+1)*self.M] = mixingPi[k+1]
                 # print(self.A)
 
                 vec = np.hstack((basis[:,i] for i in np.append(np.arange(1,self.M),0)))
-                if np.any(np.abs(np.dot(self.A/self.beta,vec))):
+                if np.any(np.abs(np.dot(self.A_nominal/self.beta,vec))):
                   print("Error in building cyclic system. A.dot(vec) != 0")
                   print(np.dot(self.A,vec))
             else:
@@ -429,14 +457,15 @@ class ExperimentRunner():
 
         self.input_signals = tuple(self.input_signals)
         self.c = np.eye(self.N * self.M)
-        self.sys_nominal = system.System(A=self.A_simulation, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
+        self.sys_nominal = system.System(A=self.A_nominal, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
         self.sys_simulation = system.System(A=self.A_simulation, c=self.c, b=self.input_signals[primary_signal_dimension].steeringVector)
 
         self.eta2_magnitude = self.compute_eta2()
         print("eta2_magnitude = {:.5e}".format(self.eta2_magnitude))
-        print("A_nominal = {}".format(self.A_nominal))
+        print("A_nominal = \n{}\n".format(self.A_nominal))
         if mismatch:
-          print("A_simulation = {}".format(self.A_simulation))
+          print("A_simulation = \n{}\n".format(self.A_simulation))
+          print("Difference: \n{}\n".format(self.A_nominal - self.A_simulation))
 
         #################################################
         #           Controller specification            #
@@ -445,39 +474,44 @@ class ExperimentRunner():
         """
           The subspace controller is only implemented for L=1 signal right now.
         """
+        self.ctrlInputMatrix = np.zeros((self.N*self.M,self.N*self.M))
+        ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+        self.ctrlObservationMatrix = np.zeros((self.N*self.M, self.N * self.M))
         if controller == 'subspaceController':
-          if self.systemtype == 'ParallelIntegratorChain':
-            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N))
+          print("Using subspaceController")
+          print("Constructing controller for system: {}".format(self.systemtype))
+          if self.systemtype == 'MixedIntegratorChains':
+            self.ctrlObservationMatrix = np.zeros((self.M, self.N * self.M))
+            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.M))
+            ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
             # if L>1:
             #   raise "Multi-Bit controller not implemented for L>1 input signals"
             if dither:
-              self.ctrlInputMatrix =  (np.random.randint(2,size=(N*M , N))*2 - 1)*self.beta*1e-3
+              self.ctrlInputMatrix =  (np.random.randint(2,size=(self.N*self.M, self.N))*2 - 1)*self.beta*1e-3
 
             if L==1:
               for i in range(N):
-                self.ctrlInputMatrix[i*M:(i+1)*M,i] = np.sqrt(self.M) * self.beta * self.H[:,0]
+                self.ctrlInputMatrix[i*M:(i+1)*M,i] = -np.sqrt(self.M) * self.beta * self.H[:,0]
               self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
             else:
               raise NotImplemented
-            self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
+            self.ctrlObservationMatrix = -np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
           elif self.systemtype == 'CyclicHadamard':
             """ Control mixing matrix for the cyclic parallel system:
-                        [  H    0    ...      0 ]
-                        [  0    H    ...      0 ]
-                        [  .        .         . ]
-               beta * ( [  .            .     . ] )
-                        [  .               .  0 ]
-                        [  0                  H ]
+                        [  H^T   0     ...   0  ]
+                        [  0    H^T    ...   0  ]
+                        [  .        .        .  ]
+               beta * ( [  .           .     .  ] )
+                        [  .              .  0  ]
+                        [  0                H^T ]
 
-            """
-
-            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N * self.M))
-            self.ctrlObservationMatrix = np.zeros((self.N*self.M, self.N * self.M))
+            """           
+            
             if dither:
-              self.ctrlInputMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1) * (self.beta/1000.)
+              self.ctrlInputMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1) * (self.beta/5000.)
             
             for k in range(self.M):
-              self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = (self.beta) * self.H.transpose()
+              self.ctrlInputMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = - self.beta * self.H.transpose()# / np.sqrt(2)
               self.ctrlObservationMatrix[k*self.M:(k+1)*self.M, k*self.M:(k+1)*self.M] = self.H
 
 
@@ -488,7 +522,6 @@ class ExperimentRunner():
             # for k in range(self.N):
             #   self.ctrlMixingMatrix[k*self.M:(k+1)*self.M, k*(self.M-1):(k+1)*(self.M-1)] = - beta * np.delete(H,k, axis=1)
           elif self.systemtype == 'CyclicGramSchmidt':
-            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N * self.M))
             if dither:
               self.ctrlInputMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1) * (self.beta/1000.)
             for k in range(self.M):
@@ -507,7 +540,6 @@ class ExperimentRunner():
 
             """
 
-            self.ctrlInputMatrix = np.zeros((self.N*self.M, self.N * self.M))
             if dither:
               self.ctrlInputMatrix = (np.random.randint(2,size=(self.N*self.M,self.N*self.M ))*2 - 1)*self.beta*1e-3
 
@@ -517,46 +549,91 @@ class ExperimentRunner():
             self.ctrlObservationMatrix = np.dot(self.ctrlInputMatrix, np.diag(1/(np.linalg.norm(self.ctrlInputMatrix, ord=2, axis=0)))).transpose()
             self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
 
-          ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
-          if 'controlInputMatrix' in self.mismatch.keys():
-            for key in self.mismatch.keys():
+          if 'controlInputMatrix' in self.mismatch:
+            for key in self.mismatch['controlInputMatrix']:
                 if key == 'element':
                   faulty_component = self.random_coordinate(self.M)
                   print(f"Single faulty component: {faulty_component}")
-                  ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch[key]['controlInputMatrix']
+                  ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch['controlInputMatrix']['element']
 
                 elif key == 'module':
                   print(f"First module faulty")
-                  ctrlMismatch[:self.M, :self.M] = (np.random.randint(2,size=(self.M,self.M))*2-1)*self.mismatch[key]['controlInputMatrix']
+                  ctrlMismatch[:self.M, :self.M] = (np.random.randint(2,size=(self.M,self.M))*2-1)*self.mismatch['controlInputMatrix']['module']
 
                 elif key =='system':
                   print("Entire system faulty")
-                  ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch[key]['controlInputMatrix']
-
+                  ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch['controlInputMatrix']['system']
         elif controller == 'diagonalController':
+            print("Using diagonalController")
+            
+            if dither:
+              self.ctrlInputMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * self.beta/5000.
+            
+            # nondithered = np.zeros_like(self.ctrlInputMatrix)
+            for i in range(self.M*self.N):
+              self.ctrlInputMatrix[i,i] = -self.kappa * self.beta #* np.sqrt(2)
+              # nondithered[i,i] = -self.kappa * self.beta #* np.sqrt(2)
+            self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
+            
+            self.ctrlObservationMatrix = np.eye(self.ctrlInputMatrix.shape[0])#-np.dot(nondithered, np.diag(1/(np.linalg.norm(nondithered, ord=2, axis=0)))).transpose()
+            print("control observation matrix: \n{}\n".format(self.ctrlObservationMatrix))
+
+            if 'controlInputMatrix' in self.mismatch:
+              for key in self.mismatch['controlInputMatrix']:
+                if key == 'element':
+                  coordinate = np.random.randint(self.M)
+                  faulty_component = (coordinate, coordinate)
+                  print(f"Single faulty component: ({faulty_component})")
+                  ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch['controlInputMatrix']['element']
+
+                elif key == 'module':
+                  print(f"First module faulty")
+                  for i in range(self.M):
+                    ctrlMismatch[i,i] = (np.random.randint(2)*2-1)*self.mismatch['controlInputMatrix']['module']
+
+                elif key =='system':
+                  print("Entire system faulty")
+                  ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch['controlInputMatrix']['system']
+
+              print("Control Mismatch: \n{}\n".format(ctrlMismatch))
+            # if self.mismatch and 'controlInputMatrix' in self.robustness:
+            #   coordinate = np.random.randint(self.M)
+            #   faulty_component = (coordinate,coordinate)
+            #   print(f"Single faulty component: {faulty_component}")
+            #   ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
+            #   ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.robustness['controlInputMatrix']
+            #   self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
+        elif controller == 'diagonalScaled':
             self.ctrlInputMatrix = np.zeros((N*M,N*M))
             if dither:
               self.ctrlInputMatrix = (np.random.randint(2,size=(self.N * self.M, self.N * self.M))*2 - 1) * self.beta*1e-3
+            scale1 = [1., 2./(self.N), 3./(self.N), 1./self.N]
+            scale2 = [1., 2./(self.N), 1./self.N, 3./(self.N)]
             for i in range(self.M*self.N):
-              self.ctrlInputMatrix[i,i] = - self.kappa * self.beta
+              if i < self.M or (i > 2*self.M-1 and i < 3*self.M):
+                self.ctrlInputMatrix[i,i] = np.sqrt(2)*self.kappa * self.beta * scale1[np.mod(i,4)]
+              else:
+                self.ctrlInputMatrix[i,i] = np.sqrt(2)*self.kappa * self.beta * scale2[np.mod(i,4)]
+
             self.nominalCtrlInputMatrix = np.copy(self.ctrlInputMatrix)
 
             ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
-            for key in self.mismatch.keys():
-              if key == 'element':
-                coordinate = np.random.randint(self.M)
-                faulty_component = (coordinate, coordinate)
-                print(f"Single faulty component: ({faulty_component})")
-                ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch[key]['controlInputMatrix']
+            if 'controlInputMatrix' in self.mismatch:
+              for key in self.mismatch:
+                if key == 'element':
+                  coordinate = np.random.randint(self.M)
+                  faulty_component = (coordinate, coordinate)
+                  print(f"Single faulty component: ({faulty_component})")
+                  ctrlMismatch[faulty_component] = (np.random.randint(2)*2-1)*self.mismatch['controlInputMatrix']['element']
 
-              elif key == 'module':
-                print(f"First module faulty")
-                for i in range(self.M):
-                  ctrlMismatch[i,i] = (np.random.randint(2)*2-1)*self.mismatch[key]['controlInputMatrix']
+                elif key == 'module':
+                  print(f"First module faulty")
+                  for i in range(self.M):
+                    ctrlMismatch[i,i] = (np.random.randint(2)*2-1)*self.mismatch['controlInputMatrix']['module']
 
-              elif key =='system':
-                print("Entire system faulty")
-                ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch[key]['controlInputMatrix']
+                elif key =='system':
+                  print("Entire system faulty")
+                  ctrlMismatch = (np.random.randint(2,size=(self.ctrlInputMatrix.shape))* 2 - 1)*self.mismatch['controlInputMatrix']['system']
             # if self.mismatch and 'controlInputMatrix' in self.robustness:
             #   coordinate = np.random.randint(self.M)
             #   faulty_component = (coordinate,coordinate)
@@ -566,17 +643,17 @@ class ExperimentRunner():
             #   self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
 
             self.ctrlObservationMatrix = np.dot(self.nominalCtrlInputMatrix, np.diag(1/(np.linalg.norm(self.nominalCtrlInputMatrix, ord=2, axis=0)))).transpose()
-
         self.ctrlInputMatrix = self.ctrlInputMatrix + np.multiply(ctrlMismatch, self.ctrlInputMatrix)
 
         self.ctrlOptions = {
             'bitsPerControl':bitsPerControl,
-            'projectionMatrix':self.ctrlObservationMatrix,
+            'projectionMatrix': self.ctrlObservationMatrix,
             'nominalCtrlInputMatrix':self.nominalCtrlInputMatrix,
             'bound':1
         }
 
         self.ctrl = system.Control(self.ctrlInputMatrix, self.size, options=self.ctrlOptions)
+        self.defineSimulationNoise()
         # self.ctrl_old = system.Control(self.ctrlInputMatrix, self.size, options=self.ctrlOptions)
 
 
@@ -648,9 +725,9 @@ class ExperimentRunner():
       systemResponse = lambda f: np.dot(self.sys_nominal.frequencyResponse(f), self.sys_nominal.b)
       systemResponse_sim = lambda f: np.dot(self.sys_simulation.frequencyResponse(f), self.sys_nominal.b)
       g0 = np.linalg.norm(systemResponse(0),2)
-      print("1/sigma2_thermal = {}".format(1./self.sigma2_thermal))
+      print("1/sigma_thermal = {}".format(1./self.sigma_thermal))
       print("norm(G(0)b) = {}".format(g0))
-      print("relative = {}".format(1./(g0*self.sigma2_thermal)))
+      print("relative = {}".format(1./(g0*self.sigma_thermal)))
 
       gsim_fs = np.linalg.norm(systemResponse_sim(1./(2*self.OSR*self.sampling_period)),2)
       gnom_fs = np.linalg.norm(systemResponse(1./(2*self.OSR*self.sampling_period)),2)
@@ -679,7 +756,7 @@ class ExperimentRunner():
         self.log("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(eta2))
         return eta2
 
-      elif self.systemtype in ['ParallelIntegratorChain', 'FullyParallelSystem']:
+      elif self.systemtype in ['MixedIntegratorChains', 'ParallelIntegratorChains']:
         eta2 = np.sum(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR)))**2)
         # print(f"eta2 = {10*np.log10(eta2)}")
         # fig,ax = plt.subplots()
@@ -699,8 +776,8 @@ class ExperimentRunner():
         Limit the low frequency gain of the system at
         approximately the thermal noise level
       """
-      if self.leakyIntegrators and self.sigma2_thermal > 0:
-        return self.beta/(self.sigma2_thermal**(-1/self.N))
+      if self.leakyIntegrators and self.sigma_thermal > 0:
+        return self.beta/(self.sigma_thermal**(-1/self.N))
       else:
         return 0
 
@@ -724,8 +801,7 @@ class ExperimentRunner():
     def run_simulation(self):
         t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         self.sim_start_time = time.time()
-
-        self.simulation_options = {'noise':[{'std':self.sigma2_thermal, 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)],
+        self.simulation_options = {'noise':self.simulation_noise,
                                    'numberOfAdditionalPoints': 4
                                    #'jitter':{'range':self.sampling_period*1e-3}
                                    }
@@ -752,7 +828,7 @@ class ExperimentRunner():
         self.eta2 = np.ones(self.M * self.N) * self.eta2_magnitude
         self.reconstruction_options = {'eta2':self.eta2,
                                        'sigmaU2':[1.]*self.L,
-                                       'noise':[{'std':self.sigma2_reconst,
+                                       'noise':[{'std':self.sigma_reconst,
                                                  'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta,
                                                  'name':'noise_{}'.format(i)} for i in range(self.N * self.M)],
                                        'mismatch':self.mismatch}
@@ -767,7 +843,28 @@ class ExperimentRunner():
         self.log(recon_log)
         self.log("Reconstruction run time: {:.2f} seconds".format(self.recon_run_time))
         self.finished_reconstruction = True
-    
+  
+
+    def defineSimulationNoise(self):
+        if 'noise_basis' in self.options:
+          self.simulation_noise = [{'std':self.sigma_thermal/np.sqrt((self.M*self.N)), 'steeringVector':self.options['noise_basis'][:,i] * self.beta} for i in range(self.M*self.N)]
+        else:
+          if self.nonuniformNoise == 'exponential':
+            grid = 2**((np.arange(self.M*self.N)+1))
+          elif self.nonuniformNoise == 'linear':
+            grid = np.arange(self.M*self.N)+1
+          else:
+            grid = np.ones(self.M*self.N)
+
+          grid = grid[::-1]
+          x = (self.M*self.N*(self.sigma_thermal**2))/sum(grid)
+          sigmas = grid*x
+          assert np.allclose(sum(sigmas), self.M*self.N*self.sigma_thermal**2)
+          print("Sum(sigmas) = %s " % (sum(sigmas),))
+          print("M*N*sigma_thermal**2 = %s" % (self.N*self.M*self.sigma_thermal**2))
+          print("Noise vector = %s" % (sigmas,))
+          
+          self.simulation_noise = [{'std':np.sqrt(sigmas[i]), 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)]
 
     def getParams(self):
         input_steering_vectors = {f'b_{i}': self.input_signals[i].steeringVector for i in range(self.L)}
@@ -784,37 +881,43 @@ class ExperimentRunner():
                   'size': "{:e}".format(self.size),
                   'num_oob': self.result['num_oob'],
                   'oob_rate': self.result['num_oob'] / self.size,
-                  'sigma2_thermal': self.sigma2_thermal,
-                  'sigma2_reconst': self.sigma2_reconst,
+                  'sigma_thermal': self.sigma_thermal,
+                  'sigma_reconst': self.sigma_reconst,
                   'bpc': self.bitsPerControl,
                   'controller': self.controller,
                   'systemtype': self.systemtype}
         return {**params, **input_steering_vectors}
 
 
-def main(experiment_id,
-         M, 
+def main(experiment_id, 
          N,
-         L,
-         input_amplitude,
+         M=1,
+         L=1,
+         input_amplitude=1,
          input_frequency=None,
          beta=6250,
          sampling_period=8e-5,
          primary_signal_dimension=0,
-         systemtype='ParallelIntegratorChain',
+         systemtype='ParallelIntegratorChains',
          OSR=16,
          eta2_magnitude=1,
          kappa=1,
-         sigma2_thermal=1e-6,
-         sigma2_reconst=1e-6,
+         sigma_thermal=1e-6,
+         sigma_reconst=1e-6,
          input_phase=0,
          num_periods_in_simulation=20,
-         controller='subspaceController',
+         controller='diagonalController',
          bitsPerControl=1,
          leaky=False,
          dither=False,
-         mismatch=''):
+         mismatch='',
+         beta_hat=6250,
+         beta_tilde=6250,
+         newInputVector=np.ones(1),
+         nonuniformNoise=False,
+         options={}):
     
+
     runner = ExperimentRunner(experiment_id=experiment_id,
                               data_dir=DATA_STORAGE_PATH,
                               M=M,
@@ -829,14 +932,19 @@ def main(experiment_id,
                               systemtype=systemtype,
                               OSR=OSR,
                               kappa=kappa,
-                              sigma2_thermal=sigma2_thermal,
-                              sigma2_reconst=sigma2_reconst,
+                              sigma_thermal=sigma_thermal,
+                              sigma_reconst=sigma_reconst,
                               num_periods_in_simulation=num_periods_in_simulation,
                               controller=controller,
                               bitsPerControl=bitsPerControl,
                               leaky=leaky,
                               dither=dither,
-                              mismatch=mismatch)
+                              mismatch=mismatch,
+                              beta_hat=beta_hat,
+                              beta_tilde=beta_tilde,
+                              newInputVector=newInputVector,
+                              nonuniformNoise=nonuniformNoise,
+                              options=options)
 
     runner.run_simulation()
     runner.run_reconstruction()
@@ -860,10 +968,10 @@ if __name__ == "__main__":
     arg_parser.add_argument("-Ts", "--sampling_period", required=True, type=float)
     arg_parser.add_argument("-Ax", "--input_amplitude", required=True,  type=float)
     # arg_parser.add_argument("-phi", "--input_phase", required=True, type=float)
-    arg_parser.add_argument("-sigma2_thermal", required=True, type=float)
-    arg_parser.add_argument("-sigma2_reconst", required=True, type=float)
-    arg_parser.add_argument("-c","--controller", type=str)
-    arg_parser.add_argument("-bpc","--bitsPerControl", type=int)
+    arg_parser.add_argument("-sigma_thermal", required=True, type=float)
+    arg_parser.add_argument("-sigma_reconst", required=True, type=float)
+    arg_parser.add_argument("-c","--controller", type=str, default='diagonalController')
+    arg_parser.add_argument("-bpc","--bitsPerControl", type=int, default=1)
 
     # Optional arguments, things that could change later
     # or are currently set to some fixed value
@@ -871,9 +979,9 @@ if __name__ == "__main__":
     # arg_parser.add_argument("-eta2", "--eta2_magnitude", type=float, default=1)
     # arg_parser.add_argument("-kappa", type=float, default=1)
     # arg_parser.add_argument("-OSR", type=int, default=16)
-    arg_parser.add_argument("-systemtype", type=str, default="ParallelIntegratorChain")
+    arg_parser.add_argument("-systemtype", type=str, default="ParallelIntegratorChains")
     # arg_parser.add_argument("-sig_dim", "--primary_signal_dimension", type=int, default=0)
-    arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int)#, default=20)
+    arg_parser.add_argument("-n_sim", "--num_periods_in_simulation", type=int, default=1)
     arg_parser.add_argument("-leaky", type=bool, default=False)
     arg_parser.add_argument("-dither", type=bool, default=False)
     arg_parser.add_argument("-mismatch", type=str, default='')

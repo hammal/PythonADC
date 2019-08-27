@@ -210,7 +210,7 @@ class Control(object):
         if 'projectionMatrix' in options:
             self.projectionMatrix = options['projectionMatrix']
         else:
-            self.projectionMatrix = np.dot(self.mixingMatrix, np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0)))).transpose()
+            self.projectionMatrix = -np.dot(self.mixingMatrix, np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0)))).transpose()
 
         if 'nominalCtrlInputMatrix' in options:
             self.nominalCtrlInputMatrix = options['nominalCtrlInputMatrix']
@@ -268,7 +268,7 @@ class Control(object):
         This is a function that sets the next control decisions
         """
         # Project to control space
-        projectedState = -np.dot(self.projectionMatrix, state)
+        projectedState = np.dot(self.projectionMatrix, state)
         # print("New %s: Old %s" % (projectedState, state))
         # print("old", (state > self.references).flatten() * 2 - 1)
         # print("new", self.algorithmicConverter(projectedState, 0, 1))

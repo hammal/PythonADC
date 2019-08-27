@@ -298,6 +298,8 @@ class WienerFilter(object):
 
             print("Offset Matrices:")
             print(self.Of, self.Ob)
+            print("nominalCtrlInputMatrix: \n{}\n".format(control.nominalCtrlInputMatrix))
+            print("mixingMatrix: \n{}\n".format(self.mixingMatrix))
 
             # Compute Control Mixing contributions
 
