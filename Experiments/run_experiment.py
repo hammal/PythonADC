@@ -826,11 +826,17 @@ class ExperimentRunner():
         t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         recon_time_start = time.time()
         self.eta2 = np.ones(self.M * self.N) * self.eta2_magnitude
+        if 'knownNoiseStructure' in self.options:
+          print('Reconstruction with known thermal noise covariance')
+          self.reconstruction_noise = self.simulation_noise
+        else:
+          self.reconstruction_noise = [{'std':self.sigma_reconst,
+                                        'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta,
+                                        'name':'noise_{}'.format(i)} for i in range(self.N * self.M)]
+
         self.reconstruction_options = {'eta2':self.eta2,
                                        'sigmaU2':[1.]*self.L,
-                                       'noise':[{'std':self.sigma_reconst,
-                                                 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta,
-                                                 'name':'noise_{}'.format(i)} for i in range(self.N * self.M)],
+                                       'noise':self.reconstruction_noise,
                                        'mismatch':self.mismatch}
 
         self.reconstruction = reconstruction.WienerFilter(t, self.sys_nominal, self.input_signals, self.reconstruction_options)
@@ -847,7 +853,9 @@ class ExperimentRunner():
 
     def defineSimulationNoise(self):
         if 'noise_basis' in self.options:
-          self.simulation_noise = [{'std':self.sigma_thermal/np.sqrt((self.M*self.N)), 'steeringVector':self.options['noise_basis'][:,i] * self.beta} for i in range(self.M*self.N)]
+          self.simulation_noise = [{'std':self.sigma_thermal/np.sqrt((self.M*self.N)),
+                                    'steeringVector':self.options['noise_basis'][:,i] * self.beta,
+                                    'name':'noise_{}'.format(i)} for i in range(self.M*self.N)]
         else:
           if self.nonuniformNoise == 'exponential':
             grid = 2**((np.arange(self.M*self.N)+1))
@@ -856,15 +864,15 @@ class ExperimentRunner():
           else:
             grid = np.ones(self.M*self.N)
 
-          grid = grid[::-1]
-          x = (self.M*self.N*(self.sigma_thermal**2))/sum(grid)
-          sigmas = grid*x
-          assert np.allclose(sum(sigmas), self.M*self.N*self.sigma_thermal**2)
-          print("Sum(sigmas) = %s " % (sum(sigmas),))
-          print("M*N*sigma_thermal**2 = %s" % (self.N*self.M*self.sigma_thermal**2))
-          print("Noise vector = %s" % (sigmas,))
-          
-          self.simulation_noise = [{'std':np.sqrt(sigmas[i]), 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)]
+            grid = grid[::-1]
+            x = (self.M*self.N*(self.sigma_thermal**2))/sum(grid)
+            sigmas = grid*x
+            assert np.allclose(sum(sigmas), self.M*self.N*self.sigma_thermal**2)
+            print("Sum(sigmas) = %s " % (sum(sigmas),))
+            print("M*N*sigma_thermal**2 = %s" % (self.N*self.M*self.sigma_thermal**2))
+            print("Noise vector = %s" % (sigmas,))
+
+            self.simulation_noise = [{'std':np.sqrt(sigmas[i]), 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)]
 
     def getParams(self):
         input_steering_vectors = {f'b_{i}': self.input_signals[i].steeringVector for i in range(self.L)}

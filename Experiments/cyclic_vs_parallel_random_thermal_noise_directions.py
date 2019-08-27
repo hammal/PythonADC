@@ -39,7 +39,8 @@ def run(experiment_id, newInputVector, systemtype):
     gaussian_random_matrix = np.random.randn(M*N,M*N)
     noise_basis = gram_schmidt(gaussian_random_matrix)
     # covariance_matrix_thermal = sum(np.outer(noise_basis[:,i],noise_basis[:,i]) for i in range(M*N))*(sigma_thermal**2)/(M*N)
-    options = {'noise_basis':noise_basis}
+    options = {'noise_basis':noise_basis,
+               'knownNoiseStructure':True}
 
 
     runner = ExperimentRunner(experiment_id=experiment_id,
