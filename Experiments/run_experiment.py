@@ -266,20 +266,23 @@ class ExperimentRunner():
               print(f'b_{i} = {self.input_signals[i].steeringVector}')
 
             elif self.L == self.M:
-              input_basis = self.options['randomInputBasis']
-              print("M signals, using random input basis")
+              # input_basis = self.options['randomInputBasis']
+              # print("M signals, using random input basis")
 
-              pibasis = np.vstack((np.outer(self.H[:,np.mod(k,M)],self.H[:,np.mod(k,M)]) for k in range(M)))
+              # pibasis = np.vstack((np.outer(self.H[:,np.mod(k,M)],self.H[:,np.mod(k,M)]) for k in range(M)))
               self.input_phases = []
               self.input_frequencies = []
               for k in range(self.L):
-                vector = self.beta_hat * np.dot(pibasis, input_basis[:,0])
+                vector = np.zeros(self.M*self.N)
+                vector[k*self.M:(k+1)*self.M] = self.beta_hat * self.H[:,k]
+                #np.dot(np.outer(self.H[:,np.mod(k,M)],self.H[:,np.mod(k,M)]),self.H[:,np.mod(k,M)])
+                #np.dot(pibasis, input_basis[:,0])
                 
                 phase = 2*np.pi*np.random.random()
                 self.input_phases.append(phase)
 
                 bw = (1./(2*self.sampling_period*self.OSR))
-                frequency = np.random.random()*(99/100)*bw + bw/100
+                frequency = np.random.random()*(49/100)*bw + bw/100
                 self.input_frequencies.append(frequency)
 
                 self.input_signals.append(system.Sin(self.sampling_period,
@@ -889,7 +892,7 @@ class ExperimentRunner():
           self.simulation_noise = [{'std':sigmas[i],
                                     'steeringVector':np.eye(self.N*self.M)[:,i] * self.beta,
                                     'name':'noise_{}'.format(i)} for i in range(self.M*self.N)]
-        elif 'random_diagonal_thermal_noise':
+        elif 'random_diagonal_thermal_noise' in self.options:
           tmp1 = np.random.random(size=self.M*self.N)*100
           tmp2 = tmp1/np.linalg.norm(tmp1)
           sigmas = self.sigma_thermal * tmp2
@@ -935,7 +938,8 @@ class ExperimentRunner():
                   'sigma_reconst': self.sigma_reconst,
                   'bpc': self.bitsPerControl,
                   'controller': self.controller,
-                  'systemtype': self.systemtype}
+                  'systemtype': self.systemtype,
+                  'mismatch':self.mismatch}
         return {**params, **input_steering_vectors}
 
 
