@@ -266,15 +266,29 @@ class ExperimentRunner():
               print(f'b_{i} = {self.input_signals[i].steeringVector}')
 
             elif self.L == self.M:
+              input_basis = self.options['randomInputBasis']
+              print("M signals, using random input basis")
+
+              pibasis = np.vstack((np.outer(self.H[:,np.mod(k,M)],self.H[:,np.mod(k,M)]) for k in range(M)))
+              self.input_phases = []
+              self.input_frequencies = []
               for k in range(self.L):
-                vector = np.zeros(self.M*self.N)
-                vector[k*self.M:(k+1)*self.M] = self.beta * self.H[:,k]
+                vector = self.beta_hat * np.dot(pibasis, input_basis[:,0])
+                
+                phase = 2*np.pi*np.random.random()
+                self.input_phases.append(phase)
+
+                bw = (1./(2*self.sampling_period*self.OSR))
+                frequency = np.random.random()*(99/100)*bw + bw/100
+                self.input_frequencies.append(frequency)
 
                 self.input_signals.append(system.Sin(self.sampling_period,
                                                    amplitude=self.input_amplitude,
-                                                   frequency=self.all_input_signal_frequencies[k],
-                                                   phase=self.input_phase,# + 2*np.pi*np.random.rand(),
+                                                   frequency=frequency,
+                                                   phase=phase,
                                                    steeringVector=vector))
+
+                print(f'Input u_{k}: f = {frequency}, phase = {phase}\nb_{k} = {self.input_signals[k].steeringVector}')
             # noiseVector = np.zeros(self.M*self.N)
             # noiseVector[0] = mixingPi[0,0,0]
             # self.input_signals.append(system.Noise(standardDeviation=1e-4, steeringVector=noiseVector))
@@ -801,6 +815,8 @@ class ExperimentRunner():
     def run_simulation(self):
         t = np.linspace(0,(self.size-1)*self.sampling_period, self.size)      
         self.sim_start_time = time.time()
+        print("\n\nThermal noise:\n")
+        print(self.simulation_noise)
         self.simulation_options = {'noise':self.simulation_noise,
                                    'numberOfAdditionalPoints': 4
                                    #'jitter':{'range':self.sampling_period*1e-3}
@@ -839,6 +855,8 @@ class ExperimentRunner():
                                        'noise':self.reconstruction_noise,
                                        'mismatch':self.mismatch}
 
+        print("Input Signals:")
+        print(self.input_signals)
         self.reconstruction = reconstruction.WienerFilter(t, self.sys_nominal, self.input_signals, self.reconstruction_options)
         tmp_estimates, recon_log = self.reconstruction.filter(self.ctrl)
         # tmp_estimates_old, recon_log_old = self.reconstruction.filter(self.ctrl_old)
@@ -853,8 +871,32 @@ class ExperimentRunner():
 
     def defineSimulationNoise(self):
         if 'noise_basis' in self.options:
-          self.simulation_noise = [{'std':self.sigma_thermal/np.sqrt((self.M*self.N)),
+          self.simulation_noise = [{'std':self.sigma_thermal/np.sqrt(self.M),
                                     'steeringVector':self.options['noise_basis'][:,i] * self.beta,
+                                    'name':'noise_{}'.format(i)} for i in range(self.M)]
+        elif 'zero_one_noise' in self.options:
+          sigmas = self.sigma_thermal * np.array([1, 1e-6]*(self.M*self.N//2))/np.sqrt(self.M*self.N/2)
+          self.simulation_noise = [{'std':sigmas[i],
+                                    'steeringVector':np.eye(self.N*self.M)[:,i] * self.beta,
+                                    'name':'noise_{}'.format(i)} for i in range(self.M*self.M)]
+        elif 'large_first_then_small' in self.options:
+          p = self.M
+          q = self.M*self.N - self.M
+          b = 1e-3
+          a = np.sqrt(1. / (p+(q*b**2)))
+          tmp = np.array([a]*p)
+          sigmas = np.concatenate((tmp,np.array([a*b]*q)))*self.sigma_thermal
+          self.simulation_noise = [{'std':sigmas[i],
+                                    'steeringVector':np.eye(self.N*self.M)[:,i] * self.beta,
+                                    'name':'noise_{}'.format(i)} for i in range(self.M*self.N)]
+        elif 'random_diagonal_thermal_noise':
+          tmp1 = np.random.random(size=self.M*self.N)*100
+          tmp2 = tmp1/np.linalg.norm(tmp1)
+          sigmas = self.sigma_thermal * tmp2
+          print("Sigmas: ")
+          print(sigmas)
+          self.simulation_noise = [{'std':sigmas[i],
+                                    'steeringVector':np.eye(self.N*self.M)[:,i] * self.beta,
                                     'name':'noise_{}'.format(i)} for i in range(self.M*self.N)]
         else:
           if self.nonuniformNoise == 'exponential':
@@ -864,15 +906,15 @@ class ExperimentRunner():
           else:
             grid = np.ones(self.M*self.N)
 
-            grid = grid[::-1]
-            x = (self.M*self.N*(self.sigma_thermal**2))/sum(grid)
-            sigmas = grid*x
-            assert np.allclose(sum(sigmas), self.M*self.N*self.sigma_thermal**2)
-            print("Sum(sigmas) = %s " % (sum(sigmas),))
-            print("M*N*sigma_thermal**2 = %s" % (self.N*self.M*self.sigma_thermal**2))
-            print("Noise vector = %s" % (sigmas,))
+          grid = grid[::-1]
+          x = (self.M*self.N*(self.sigma_thermal**2))/sum(grid)
+          sigmas = grid*x
+          assert np.allclose(sum(sigmas), self.M*self.N*self.sigma_thermal**2)
+          print("Sum(sigmas) = %s " % (sum(sigmas),))
+          print("M*N*sigma_thermal**2 = %s" % (self.N*self.M*self.sigma_thermal**2))
+          print("Noise vector = %s" % (sigmas,))
 
-            self.simulation_noise = [{'std':np.sqrt(sigmas[i]), 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)]
+          self.simulation_noise = [{'std':np.sqrt(sigmas[i]), 'steeringVector': np.eye(self.N * self.M)[:,i] * self.beta}  for i in range(self.M * self.N)]
 
     def getParams(self):
         input_steering_vectors = {f'b_{i}': self.input_signals[i].steeringVector for i in range(self.L)}
