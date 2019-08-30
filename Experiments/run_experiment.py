@@ -140,8 +140,8 @@ class ExperimentRunner():
         self.A_simulation = np.zeros((self.N*self.M, self.N*self.M))
         self.A_nominal = np.zeros((self.N*self.M, self.N*self.M))
 
-        if self.systemtype == "MixedIntegratorChains":
-            print("System Type: Mixed Integrator Chains")
+        if self.systemtype == "BraidedChains":
+            print("System Type: Braided Chains")
             mixingPi = np.zeros((self.N-1, self.M, self.M))
             
             if N > 1:
@@ -497,7 +497,7 @@ class ExperimentRunner():
         if controller == 'subspaceController':
           print("Using subspaceController")
           print("Constructing controller for system: {}".format(self.systemtype))
-          if self.systemtype == 'MixedIntegratorChains':
+          if self.systemtype == 'BraidedChains':
             self.ctrlObservationMatrix = np.zeros((self.M, self.N * self.M))
             self.ctrlInputMatrix = np.zeros((self.N*self.M, self.M))
             ctrlMismatch = np.zeros_like(self.ctrlInputMatrix)
@@ -773,7 +773,7 @@ class ExperimentRunner():
         self.log("eta2_magnitude set to sum(|G(s)b|^2) = {:.5e}".format(eta2))
         return eta2
 
-      elif self.systemtype in ['MixedIntegratorChains', 'ParallelIntegratorChains']:
+      elif self.systemtype in ['BraidedChains', 'ParallelIntegratorChains']:
         eta2 = np.sum(np.abs(systemResponse(1./(2. * self.sampling_period * self.OSR)))**2)
         # print(f"eta2 = {10*np.log10(eta2)}")
         # fig,ax = plt.subplots()
