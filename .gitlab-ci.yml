@@ -2,10 +2,10 @@ stages:
   - test
   - simulate
 
-image: continuumio/anaconda3:latest
+image: continuumio/anaconda3:5.3.0
 
 before_script:
-  - "conda install -y scipy"
+  - "conda install -y scipy pip"
   - "pip install cvxopt"
   - "mkdir -p /root/.config/matplotlib"
   - "echo 'backend : Agg' > /root/.config/matplotlib/matplotlibrc"
