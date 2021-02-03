@@ -17,12 +17,17 @@ class Simulator(object):
     handle one or multiple inputs for simulating.
     """
     def __init__(self, system, control=None, initalState=None, options={}):
-        self.system = system
+        if type(system) is list:
+            self.systems = system
+            self.multi_system = True
+        else:
+            self.system = system
+            self.multi_system = False
         self.control = control
 
         # Set the inital state
         if type(initalState) is np.ndarray:
-            self.state = initalState.reshape((system.order,))
+            self.state = initalState
         else:
             # self.state = np.zeros(system.order)
             self.state = np.random.randint(2, size=system.order) * 2. - 1.
@@ -51,7 +56,13 @@ class Simulator(object):
         system from the current state for all time marks in t. At these time the
         control is also updated!
         """
-        outputDimension = self.system.outputOrder
+        if not self.multi_system:
+            outputDimension = self.system.outputOrder
+            order = self.system.order
+        else:
+            outputDimension = self.systems[0].outputOrder
+            order = self.systems[0].order
+
         if outputDimension:
             output = np.zeros((sampling_grid.size, outputDimension))
 
@@ -72,48 +83,92 @@ class Simulator(object):
 
         # for timeInstance in tnew[1:]:
 
-        sampling_grid_remaining = np.copy(sampling_grid[1:])
+        # sampling_grid_remaining = np.copy(sampling_grid[1:])
+        sampling_grid_remaining = np.copy(sampling_grid)
         # call_counter = 0
         # t_old = 0
         # reevaluation_counter = 0
-        def f(x, tau):
-            nonlocal sampling_grid_remaining, current_sample, num_samples
-            """
-            Compute the system derivative considering state control and input.
-            """ 
-            # call_counter += 1
+        if self.multi_system:
+            def f(x, tau):
+                nonlocal sampling_grid_remaining, current_sample, num_samples
+                """
+                Compute the system derivative considering state control and input.
+                """ 
+                # call_counter += 1
 
-            # if t_old == tau and call_counter > 2:
-            #     reevaluation_counter +=1
-            # t_old = tau
+                # if t_old == tau and call_counter > 2:
+                #     reevaluation_counter +=1
+                # t_old = tau
+                systemIndex = self.control.systemIndex(False)
+                # print(systemIndex)
+                hom = np.dot(self.systems[systemIndex].A, x.reshape((self.systems[systemIndex].order,1))).flatten()
+                control = self.control.fun(tau)
+                if tau == 0:
+                    print("Control Decision at t=0: {}".format(control))
+                input = np.zeros_like(hom)
+                if inputs:
+                    for signal in inputs[systemIndex]:
+                        input += signal.fun(tau)
 
-            hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
-            control = self.control.fun(tau)
-            if tau == 0:
-                print("Control Decision at t=0: {}".format(control))
-            input = np.zeros_like(hom)
-            if inputs:
-                for signal in inputs:
-                    input += signal.fun(tau)
+                if tau in sampling_grid_remaining:
+                    current_sample += 1
+                    # Update control descisions
+                    self.control.update(x)
+                    sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
+                    # Print progress every 1e4 samples
+                    # try:
+                    #     if current_sample % (num_samples//1e4) == 0:
+                    #         print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+                    # except ZeroDivisionError:
+                    #     pass
 
-            if tau in sampling_grid_remaining:
-                current_sample += 1
-                # Update control descisions
-                self.control.update(x)
-                sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
-                # Print progress every 1e4 samples
-                try:
-                    if current_sample % (num_samples//1e4) == 0:
-                        print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
-                except ZeroDivisionError:
-                    pass
+                # print(f"tau: {tau}")
+                # time.sleep(0.1)
 
-            return hom + control + input
+                return hom + control + input
+
+        else:
+            def f(x, tau):
+                nonlocal sampling_grid_remaining, current_sample, num_samples
+                """
+                Compute the system derivative considering state control and input.
+                """ 
+                # call_counter += 1
+
+                # if t_old == tau and call_counter > 2:
+                #     reevaluation_counter +=1
+                # t_old = tau
+
+                hom = np.dot(self.system.A, x.reshape((self.system.order,1))).flatten()
+                control = self.control.fun(tau)
+                if tau == 0:
+                    print("Control Decision at t=0: {}".format(control))
+                input = np.zeros_like(hom)
+                if inputs:
+                    for signal in inputs:
+                        input += signal.fun(tau)
+
+                if tau in sampling_grid_remaining:
+                    current_sample += 1
+                    # Update control descisions
+                    self.control.update(x)
+                    sampling_grid_remaining = np.delete(sampling_grid_remaining,0)
+                    # Print progress every 1e4 samples
+                    # try:
+                    #     if current_sample % (num_samples//1e4) == 0:
+                    #         print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+                    # except ZeroDivisionError:
+                    #     pass
+
+                # print(f"tau: {tau}")
+                # time.sleep(0.1)
+
+                return hom + control + input
 
         if "noise" in self.options:
             print("NOISE")
              # Shock Noise
-            noise_state = np.zeros((self.system.order, len(self.options["noise"])))
+            noise_state = np.zeros((order, len(self.options["noise"])))
             for i, noiseSource in enumerate(self.options['noise']):
                 # print(noiseSource['std'])
                 if noiseSource['std'] > 0:
@@ -143,6 +198,7 @@ class Simulator(object):
                 for index in range(sampling_grid.size-1):
                     temp[index * (numberOfAdditionalPoints+1) + 1: (index + 1) * (numberOfAdditionalPoints+1)] = np.linspace(sampling_grid[index],sampling_grid[index+1],numberOfAdditionalPoints+2)[1:-1]
                 simulation_grid = temp
+                print(f"simulation_grid:\n{simulation_grid[:20]}")
             else:
                 simulation_grid = sampling_grid
                 numberOfAdditionalPoints = 0
@@ -165,11 +221,20 @@ class Simulator(object):
         # Solve ordinary differential equation
         # self.state = odeint(derivate, self.state, np.array([t0, timeInstance]), mxstep=100, rtol=1e-13, hmin=1e-12)[-1, :]
         # tspace = np.linspace(t0, timeInstance, 10)
-        
-        
+
+        var = np.var(self.state, axis=1)
+        print("\nVariance of simulations:")
+        for i,v in enumerate(var):
+            print("\tState {}: {}".format(i+1, v))     
+        print("Average Power: {}\n\n".format(np.mean(var)))
+
+
         # Store observations
         if outputDimension:
-            output = np.transpose(self.system.output(self.state))
+            if self.multi_system:
+                output = np.transpose(self.state[:])
+            else:
+                output = np.transpose(self.system.output(self.state))
             # index += 1
         # If thermal noise should be simulated
         # if "noise" in self.options:
@@ -215,24 +280,38 @@ class Simulator(object):
                 # self.log("STATE BOUND EXCEEDED! Sample #: {}".format(current_sample))
                 # self.log("X_{} = {}".format(oob_states, self.state[oob_states]))
                 self.num_oob += 1
-                #self.state[above] = bound
-                #self.state[below] = -bound
+                # self.state[above] = bound
+                # self.state[below] = -bound
 
         # print(self.state)
         
         # print("Number of reevaluations of f(x,t) = {}".format(reevaluation_counter))
         # print("New simulator number of calls to f(x,t) = {}".format(call_counter))
         # Return simulation object
-        return {
-            't': sampling_grid,
-            'control': self.control,
-            'output': output,
-            'system': self.system,
-            'state': self.state,
-            'options': self.options,
-            'log': self.logstr,
-            'num_oob': self.num_oob
-        }
+        if self.multi_system:
+            return {
+                't': sampling_grid,
+                'control': self.control,
+                'output': output,
+                'system': self.systems,
+                'state': self.state,
+                'options': self.options,
+                'log': self.logstr,
+                'num_oob': self.num_oob,
+                'power': var
+            }
+        else:
+            return {
+                't': sampling_grid,
+                'control': self.control,
+                'output': output,
+                'system': self.system,
+                'state': self.state,
+                'options': self.options,
+                'log': self.logstr,
+                'num_oob': self.num_oob,
+                'power': var
+            }
 
 
     def simulate_old(self, t, inputs=None):
@@ -349,13 +428,19 @@ class Simulator(object):
 
             current_sample += 1
 
-            try:
-                if current_sample % (num_samples//1e4) == 0:
-                    print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
-            except ZeroDivisionError:
-                pass
+            # try:
+            #     if current_sample % (num_samples//1e4) == 0:
+            #         print("Simulation Progress: %.2f%%    \r" % (100*(current_sample/num_samples)), end='', flush=True)
+            # except ZeroDivisionError:
+            #     pass
 
         # Return simulation object
+        var = np.var(output, axis=1)
+        print("\nVariance of simulations:")
+        for i,v in enumerate(var):
+            print("\tState {}: {}".format(i+1, v))     
+        print("Average Power: {}\n\n".format(np.mean(var)))
+
         return {
             't': t,
             'control': self.control,
@@ -364,7 +449,8 @@ class Simulator(object):
             'state': self.state,
             'options': self.options,
             'log': self.logstr,
-            'num_oob': self.num_oob
+            'num_oob': self.num_oob,
+            'power': var
         }
 
 

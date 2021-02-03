@@ -56,15 +56,31 @@ def care(A, B, Q, R):
     except LinAlgError:
         print("Cholesky Method Failed for computing the CARE of Vf. Starting brute force")
         Vf = bruteForceCare(A, B, Q, R)
-    
+
     try:
         Vb = scipy.linalg.solve_continuous_are(-A, B, Q, R)
     except LinAlgError:
         print("Cholesky Method Failed for computing the CARE of Vb. Starting brute force")
         Vb = bruteForceCare(-A, B, Q, R)
-  
+
+    RInv = np.linalg.inv(R)
+    tau = 1e-15
+    Vf = np.array(Vf, dtype=np.longdouble)
+    Vb = np.array(Vb, dtype=np.longdouble)
+    print("Vf and Vb Before")
+    print(Vf)
+    print(Vb)
+    for _ in range(1000):
+        Vf = Vf + tau * (np.dot(A,Vf) + np.transpose(np.dot(A,Vf)) + Q - np.dot(Vf, np.dot(B, np.dot(RInv, np.dot(B.transpose(), Vf)))))
+        Vb = Vb + tau * (np.dot(-A,Vb) + np.transpose(np.dot(-A,Vb)) + Q - np.dot(Vb, np.dot(B, np.dot(RInv, np.dot(B.transpose(), Vb)))))
     # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
     # res1 = np.dot(A.transpose(), Vf) + np.dot(Vf, A) - np.dot(Vf, np.dot(B, np.dot(np.lina)))
+    Vf = np.array(Vf, dtype=np.float64)
+    Vb = np.array(Vb, dtype=np.float64)
+    print("Vf and Vb After")
+    print(Vf)
+    print(Vb)
+ 
     return Vf, Vb
 #
 #
@@ -192,6 +208,7 @@ class WienerFilter(object):
         else:
             self.eta2 = np.ones(self.order)
 
+
         if 'noise' in options:
             for source in options['noise']:
                 self.noise.append(Noise(standardDeviation=source['std'], steeringVector=source['steeringVector'], name=source["name"]))
@@ -201,7 +218,7 @@ class WienerFilter(object):
             self.sigmaU2 = np.array(options['sigmaU2'], dtype=np.float64)
         else:
             self.sigmaU2 = np.ones(len(inputs), dtype=np.float64)
-        
+
         if 'mismatch' in options and options['mismatch'] != '':
             print("Mismatch Experiment: Reconstruction with nominal values")
             self.mismatch = True
@@ -222,7 +239,10 @@ class WienerFilter(object):
             QNoise += (noiseSource.std) ** 2. * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
         # print("Q after ", Q)
         if self.eta2.size > 1:
-            R = np.diag(self.eta2)
+            if self.eta2.size != B.shape[1]:
+                R = self.eta2[0] * np.eye(B.shape[1], B.shape[1])
+            else:
+                R = np.diag(self.eta2)
         else:
             R = self.eta2.reshape((1,1))
         print("Q:\n%s\nQNoise:\n%s" % (Q, QNoise))
@@ -230,8 +250,8 @@ class WienerFilter(object):
         print("Vf, Vb\n",Vf + Vb)
 
         # These are used for computing an offset contribution y
-        self.ForwardOffsetMatrix = np.dot(Vf, self.system.c) / self.eta2
-        self.BackwardOffsetMatrix = np.dot(Vb, self.system.c) / self.eta2
+        # self.ForwardOffsetMatrix = np.dot(Vf, self.system.c) / self.eta2[0]
+        # self.BackwardOffsetMatrix = np.dot(Vb, self.system.c) / self.eta2[0]
 
         if self.eta2.ndim < 2:
             self.tempAf = (self.system.A - np.dot(Vf, np.dot(self.system.c, self.system.c.transpose())) / self.eta2)
@@ -286,20 +306,21 @@ class WienerFilter(object):
                 # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
                 self.Bb[:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.order, dtype=np.float64), np.array([0., self.Ts]))[-1,:]
             # Compute Offsets
-            if self.ForwardOffsetMatrix.shape[1] == 1:
-                self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
-                self.Ob = - np.dot(self.Bb, self.BackwardOffsetMatrix * control.references[0]).flatten()
-            else:
-                self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, np.dot(control.nominalCtrlInputMatrix, control.references)))
-                self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, np.dot(control.nominalCtrlInputMatrix, control.references)))
+            # if self.ForwardOffsetMatrix.shape[1] == 1:
+            #     self.Of = np.dot(self.Bf, self.ForwardOffsetMatrix * control.references[0]).flatten()
+            #     self.Ob = - np.dot(self.Bb, self.BackwardOffsetMatrix * control.references[0]).flatten()
+            # else:
+            #     print(self.Bf, self.ForwardOffsetMatrix)
+            #     self.Of = np.dot(self.Bf, np.dot(self.ForwardOffsetMatrix, np.dot(control.nominalCtrlInputMatrix, control.references)))
+            #     self.Ob = - np.dot(self.Bb, np.dot(self.BackwardOffsetMatrix, np.dot(control.nominalCtrlInputMatrix, control.references)))
             # else:
             #     self.Of = np.zeros(self.order)
             #     self.Ob = np.zeros(self.order)
 
-            print("Offset Matrices:")
-            print(self.Of, self.Ob)
-            print("nominalCtrlInputMatrix: \n{}\n".format(control.nominalCtrlInputMatrix))
-            print("mixingMatrix: \n{}\n".format(self.mixingMatrix))
+            # print("Offset Matrices:")
+            # print(self.Of, self.Ob)
+            # print("nominalCtrlInputMatrix: \n{}\n".format(control.nominalCtrlInputMatrix))
+            # print("mixingMatrix: \n{}\n".format(self.mixingMatrix))
 
             # Compute Control Mixing contributions
 
@@ -310,7 +331,7 @@ class WienerFilter(object):
                 self.Bf = np.dot(self.Bf, self.mixingMatrix)
                 self.Bb = np.dot(self.Bb, self.mixingMatrix)
 
-                
+
         else:
             raise NotImplemented
 
@@ -324,12 +345,12 @@ class WienerFilter(object):
         # Compute Bf and Bb for this type of control
         self.mixingMatrix = control.mixingMatrix
         self.computeControlTrajectories(control)
-        
+
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)), dtype=np.float64)
         mf = np.zeros((self.order, control.size), dtype=np.float64)
         mb = np.zeros_like(mf)
-        # If not initial state use the control sequence and assume at rails 1 V 
+        # If not initial state use the control sequence and assume at rails 1 V
         if initialState:
             mf[:,0] = initialState
         elif self.mismatch:
@@ -339,10 +360,10 @@ class WienerFilter(object):
 
         print(control.size)
         for index in range(1, control.size):
-            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1]) + self.Of
+            mf[:, index] = np.dot(self.Af, mf[:, index - 1]) + np.dot(self.Bf, control[index - 1])# + self.Of
             # print(mf[:, index])
         for index in range(control.size - 2, 1, -1):
-            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index]) + self.Ob
+            mb[:, index] = np.dot(self.Ab, mb[:, index + 1]) + np.dot(self.Bb, control[index])# + self.Ob
             # print(mb[:, index] - mf[:, index])
             u[index] = np.dot(self.w.transpose(), mb[:, index] - mf[:, index])
         return u, self.logstr
@@ -389,7 +410,7 @@ class ParallelWienerFilter(WienerFilter):
         self.mixingMatrix = control.mixingMatrix
         self.computeControlTrajectories(control)
 
-        
+
         # Initalise memory
         u = np.zeros((control.size, len(self.inputs)), dtype=np.complex128)
         mf = np.zeros((self.order), dtype=np.complex128)
@@ -410,7 +431,7 @@ class ParallelWienerFilter(WienerFilter):
         print(self.wb)
         # exit(1)
 
-        # If not initial state use the control sequence and assume at rails 1 V 
+        # If not initial state use the control sequence and assume at rails 1 V
         if initialState:
             mf[:,0] = np.dot(self.QfInv, initialState)
 
@@ -583,6 +604,210 @@ class WienerFilterWithPostFiltering(WienerFilter):
         return u
 
 
+class WienerFilterMultipleSystems(object):
+    """
+    This is the Wiener filter which is the standard implementation of
+    [On sparsity by NUV-EM, Gaussian message passing, and Kalman smoothing](http://ieeexplore.ieee.org/document/7888168/).
+    Note that this method assumes steady state conditions and is therefore prune
+    to initialisation effects.
+    """
+    def __init__(self, t, systems, inputs, options={}):
+        """
+        This constructor requries:
+        - t which are the times to reconstruct at (assumed to be uniformly spaced)
+        - a system model
+        - inputs an iterable of inputs to be estimatedself.
+        - options
+        """
+        self.logstr = ""
+        self.log("Reconstruction started!")
+
+        self.Ts = t[1] - t[0]
+        self.systems = systems
+        self.inputs = inputs
+        self.orders = [system.order for system in self.systems]
+        self.noise = []
+
+        if 'eta2' in options:
+            self.eta2 = options['eta2']
+        else:
+            self.eta2 = np.ones(self.order)
+
+        if 'noise' in options:
+            for source in options['noise']:
+                self.noise.append(Noise(standardDeviation=source['std'], steeringVector=source['steeringVector'], name=source["name"]))
+
+
+        if 'sigmaU2' in options:
+            self.sigmaU2 = np.array(options['sigmaU2'], dtype=np.float64)
+        else:
+            self.sigmaU2 = np.ones(len(inputs), dtype=np.float64)
+
+        if 'mismatch' in options and options['mismatch'] != '':
+            print("Mismatch Experiment: Reconstruction with nominal values")
+            self.mismatch = True
+        else:
+            self.mismatch = False
+
+        # Solve care
+        # A^TX + X A - X B (R)^(-1) B^T X + Q = 0
+        # for every system
+        self.tempAf = [None for _ in range(len(self.systems))]
+        self.tempAb = [None for _ in range(len(self.systems))]
+        self.Af = [None for _ in range(len(self.systems))]
+        self.Ab = [None for _ in range(len(self.systems))]
+        self.w = [None for _ in range(len(self.systems))]
+        self.ForwardOffsetMatrix = [None for _ in range(len(self.systems))]
+        self.BackwardOffsetMatrix = [None for _ in range(len(self.systems))]
+        for index, system in enumerate(self.systems):
+            A = system.A.transpose()
+            B = system.c
+            Q = np.zeros((self.orders[index], self.orders[index]), dtype=np.float64)
+            QNoise = np.zeros_like(Q)
+            for ii, input in enumerate(self.inputs[index]):
+                Q += self.sigmaU2[ii] * np.outer(input.steeringVector,input.steeringVector)
+
+            # print("Q before ", Q)
+            for noiseSource in self.noise:
+                QNoise += (noiseSource.std) ** 2. * np.outer(noiseSource.steeringVector, noiseSource.steeringVector)
+            # print("Q after ", Q)
+            if self.eta2.size > 1:
+                R = np.diag(self.eta2)
+            else:
+                R = self.eta2.reshape((1,1))
+            print("Q:\n%s\nQNoise:\n%s" % (Q, QNoise))
+            Vf, Vb = care(A, B, Q + QNoise, R)
+            print("Vf, Vb\n",Vf + Vb)
+
+            # These are used for computing an offset contribution y
+            self.ForwardOffsetMatrix[index] = np.dot(Vf, system.c) / self.eta2
+            self.BackwardOffsetMatrix[index] = np.dot(Vb, system.c) / self.eta2
+
+            if self.eta2.ndim < 2:
+                self.tempAf[index] = (system.A - np.dot(Vf, np.dot(system.c, system.c.transpose())) / self.eta2)
+                self.tempAb[index] = (system.A + np.dot(Vb, np.dot(system.c, system.c.transpose())) / self.eta2)
+            else:
+                eta2inv = np.linalg.inv(np.diag(self.eta2))
+                self.tempAf[index] = (system.A - np.dot(Vf, np.dot(system.c, np.dot(eta2inv, system.c.transpose()))))
+                self.tempAb[index] = (system.A + np.dot(Vb, np.dot(system.c, np.dot(eta2inv, system.c.transpose()))))
+
+            self.Af[index] = scipy.linalg.expm(self.tempAf[index] * self.Ts)
+
+            self.Ab[index] = scipy.linalg.expm(-self.tempAb[index] * self.Ts)
+
+            B = np.zeros((self.orders[index], 1), dtype=np.float64)
+            for ii, input in enumerate(self.inputs[index]):
+                B[:, ii] = input.steeringVector
+            # print("V_f - Af Vf Af")
+            # print(Vf - np.dot(self.Af, np.dot(Vf, self.Af.transpose())))
+
+            self.w[index] = np.linalg.solve(Vf + Vb, B)
+
+
+
+
+    def log(self,message=""):
+        tmp = "{}: {}\n".format(time.strftime("%d/%m/%Y %H:%M:%S"), message)
+        self.logstr += tmp
+
+
+    def __str__(self):
+        return "Af = \n%s\nBf = \n%s\nAb = \n%s\nBb = \n%s\nw = \n%s\n" % (self.Af, self.Bf, self.Ab, self.Bb, self.w)
+
+    def computeControlTrajectories(self, control):
+        self.Bf = [None for _ in range(len(self.systems))]
+        self.Bb = [None for _ in range(len(self.systems))]
+        self.Of = [None for _ in range(len(self.systems))]
+        self.Ob = [None for _ in range(len(self.systems))]
+
+        for index, system in enumerate(self.systems):
+            if control.type == 'analog switch':
+                self.Bf[index] = np.zeros((self.orders[index], self.orders[index]), dtype=np.float64)
+                self.Bb[index] = np.zeros((self.orders[index], self.orders[index]), dtype=np.float64)
+                for controlIndex in range(self.orders[index]):
+                    def ForwardDerivative(x, t):
+                        hom = np.dot(self.tempAf[index], x.reshape((self.orders[index],1))).flatten()
+                        control = np.zeros(self.orders[index])
+                        control[controlIndex] = 1
+                        return hom + control
+
+                    def BackwardDerivative(x, t):
+                        hom = - np.dot(self.tempAb[index], x.reshape((self.orders[index],1))).flatten()
+                        control = np.zeros(self.orders[index])
+                        control[controlIndex] = 1
+                        return hom + control
+
+                    # self.Bf = np.dot(self.system.zeroOrderHold(tempAf, Ts), self.system.B)
+                    self.Bf[index][:, controlIndex] = odeint(ForwardDerivative, np.zeros(self.orders[index], dtype=np.float64), np.array([0., self.Ts]))[-1,:]
+                    # self.Bb = -np.dot(self.system.zeroOrderHold(-tempAb, Ts), self.system.B)
+                    self.Bb[index][:, controlIndex] = - odeint(BackwardDerivative, np.zeros(self.orders[index], dtype=np.float64), np.array([0., self.Ts]))[-1,:]
+                # Compute Offsets
+                if self.ForwardOffsetMatrix[index].shape[1] == 1:
+                    self.Of[index] = np.dot(self.Bf[index], self.ForwardOffsetMatrix[index] * control.references[0]).flatten()
+                    self.Ob[index] = - np.dot(self.Bb[index], self.BackwardOffsetMatrix[index] * control.references[0]).flatten()
+                else:
+                    self.Of[index] = np.dot(self.Bf[index], np.dot(self.ForwardOffsetMatrix[index], np.dot(control.nominalCtrlInputMatrix, control.references)))
+                    self.Ob[index] = - np.dot(self.Bb[index], np.dot(self.BackwardOffsetMatrix[index], np.dot(control.nominalCtrlInputMatrix, control.references)))
+                # else:
+                #     self.Of = np.zeros(self.order)
+                #     self.Ob = np.zeros(self.order)
+
+                print("Offset Matrices:")
+                print(self.Of[index], self.Ob[index])
+                print("nominalCtrlInputMatrix: \n{}\n".format(control.nominalCtrlInputMatrix))
+                print("mixingMatrix: \n{}\n".format(self.mixingMatrix))
+
+                # Compute Control Mixing contributions
+
+                if self.mismatch:
+                    self.Bf[index] = np.dot(self.Bf[index], control.nominalCtrlInputMatrix)
+                    self.Bb[index] = np.dot(self.Bb[index], control.nominalCtrlInputMatrix)
+                else:
+                    self.Bf[index] = np.dot(self.Bf[index], self.mixingMatrix)
+                    self.Bb[index] = np.dot(self.Bb[index], self.mixingMatrix)
+
+
+            else:
+                raise NotImplemented
+
+
+
+    def filter(self, control, initialState=None):
+        """
+        This is the actual filter operation. The controller needs to be a
+        Controller class instance from system.py.
+        """
+        # Compute Bf and Bb for this type of control
+        self.mixingMatrix = control.mixingMatrix
+        self.computeControlTrajectories(control)
+
+        # Initalise memory
+        u = np.zeros((control.size, 1), dtype=np.float64)
+        mf = np.zeros((np.max(self.orders), control.size), dtype=np.float64)
+        mb = np.zeros_like(mf)
+        # If not initial state use the control sequence and assume at rails 1 V
+        if initialState:
+            mf[:,0] = initialState
+        elif self.mismatch:
+            mf[:,0] = np.array(np.dot(control.nominalCtrlInputMatrix, control[0]))
+        else:
+            mf[:,0] = np.array(np.dot(control.mixingMatrix, control[0]))
+
+        print(control.size)
+        for index in range(1, control.size):
+            systemIndex = control.systemIndex(index)
+            mf[:, index] = np.dot(self.Af[systemIndex], mf[:, index - 1]) + np.dot(self.Bf[systemIndex], control[index - 1])# + self.Of
+            # print(mf[:, index])
+        for index in range(control.size - 2, 1, -1):
+            systemIndex = control.systemIndex(index)
+            mb[:, index] = np.dot(self.Ab[systemIndex], mb[:, index + 1]) + np.dot(self.Bb[systemIndex], control[index])# + self.Ob
+            # print(mb[:, index] - mf[:, index])
+            # print(np.dot(self.w[systemIndex].transpose(), mb[:, index] - mf[:, index]))
+            # print(mb[:, index] - mf[:, index])
+            # print(self.w[systemIndex])
+            u[index] = np.dot(self.w[systemIndex].transpose(), mb[:, index] - mf[:, index])
+        return u, self.logstr
+
 class DiscreteTimeKalmanFilter(object):
     """
     This is the Kalman filter approach to the reconstruction problem where
@@ -691,7 +916,7 @@ class DiscreteTimeKalmanFilter(object):
                 self.w = self.inputs[0].steeringVector.transpose() * self.sigmaU2
         else:
             raise NotImplemented
-        
+
 
 
     def filter(self, control, outputGain = .25):
@@ -795,7 +1020,7 @@ class Calibration3(object):
             self.s[index] = control[index]
 
         self.mixingMatrix = control.mixingMatrix
-        
+
 
         if 'eta2' in options:
             self.eta2 = options['eta2']
@@ -820,10 +1045,10 @@ class Calibration3(object):
             for index in range(self.order):
                 line, = self.ax.plot(t, dummy)
                 self.lines.append(line)
-            
-        
 
-    def plotStateTrajectories(self): 
+
+
+    def plotStateTrajectories(self):
         # Unpack states into numpy array
         tmp = np.zeros((self.system.order, len(self.mX)))
         for index, sample in enumerate(self.mX):
@@ -839,7 +1064,7 @@ class Calibration3(object):
         self.fig.canvas.flush_events()
 
     def calibrate(self, theta0, numberOfIterations = 5):
-   
+
 
         # Compute Noise Input steering vector
         B = np.zeros((self.order, len(self.noise)))
@@ -893,7 +1118,7 @@ class Calibration3(object):
         Acount = np.sum(self.Amask)
         A[self.Amask] = np.array(theta[:Acount])
         return A
-    
+
     def systemToTheta(self, A):
         """
         Helper function to convert system matrix to theta vector
@@ -909,7 +1134,7 @@ class Calibration3(object):
         Bfb = self.inputSteeringMatrix(A)
         Weps = self.W_epsilon
         return  np.trace(
-                    np.dot(Weps, 
+                    np.dot(Weps,
                         np.dot(Ad, np.dot(self.X1X1, Ad.transpose())) \
                         +   np.dot(BfB, np.dot(self.S1S1, BfB.transpose())) \
                         +   np.dot(Bfb, np.dot(self.U1U1, Bfb.transpose())) \
@@ -943,7 +1168,7 @@ class Calibration3(object):
         Compute: exp(A Ts)
         """
         return scipy.linalg.expm(A * (T[1] - T[0]))
-        
+
 
 
     def __str__(self):
@@ -962,7 +1187,7 @@ class Calibration3(object):
 
         Bf = np.dot(Bf, self.mixingMatrix)
         return Bf
-        
+
     def InputContribution(self, A, index):
         result = np.zeros(self.order)
         T = np.array([index - 1, index]) * self.Ts
@@ -994,7 +1219,7 @@ class Calibration3(object):
         This is the actual filter operation. The controller needs to be a
         Controller class instance from system.py.
         """
-        
+
         infty = self.eta2[0] * 1e8
         # r2 = self.eta2[0] / infty
         r2 = self.eta2[0]
@@ -1018,7 +1243,7 @@ class Calibration3(object):
         self.X1X1 = np.zeros((self.order, self.order))
         self.S1S1 = np.zeros((self.order, self.order))
         self.U1U1 = np.zeros((self.order, self.order))
-        
+
         self.X2X1 = np.zeros((self.order, self.order))
         self.S1X1 = np.zeros((self.order, self.order))
         self.U1X1 = np.zeros((self.order, self.order))
@@ -1044,11 +1269,11 @@ class Calibration3(object):
                 # print(xi[:, index])
                 mX[index] = mf[:, index] - np.dot(Vf[index], xi[:, index])
                 VX[index] = Vf[index] - np.dot(Vf[index], W_tilde[index], Vf[index])
-                
+
                 self.X1X1 += VX[index] + np.outer(mX[index], mX[index])
                 self.S1S1 += np.outer(self.s[index], self.s[index])
                 self.U1U1 += np.outer(u, u)
-                
+
                 if index < self.size - 2:
                     self.X2X1 += np.array(np.dot(F[index], np.dot(Vf[index], np.dot(self.Ad.transpose(), (np.eye(self.order) - np.dot(W_tilde[index + 1], Vf[index + 1]))))) \
                                 + np.outer(mX[index], mX[index+1])).transpose()
@@ -1700,13 +1925,13 @@ class SelfCalibrationSecond(object):
                 control[controlIndex] = 1
                 return hom + control
 
-            
+
             Bf[:, controlIndex] = odeint(derivative, np.zeros(self.order), np.array([0., self.Ts]))[-1,:]
 
         Bf = np.dot(Bf, B)
         print("Computed System:\ntheta=%s\nA=%s\nB=%s" % (theta, A, B))
         return Af, Bf, C
-    
+
     def systemToTheta(self, A, B):
         Amask = A != 0
         Bmask = B != 0

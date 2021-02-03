@@ -21,12 +21,21 @@ class DeltaSigma(object):
         self.nlev = [int(nlev)]
         self.order = order
         self.OSR = OSR
-        # self.form = "CIFB"
-        self.form = "CRFB"
-        self.ntf = synthesizeNTF(self.order, self.OSR, opt=0)
-        a, g, b, c = realizeNTF(self.ntf, self.form)
-        self.ABCD = stuffABCD(a, g, b, c, self.form)
-        print("ABCD:\n%s"% self.ABCD)
+        if order > 1:
+            # self.form = "CIFB"
+            # self.form = "CIFF"
+            self.form = "CRFB"
+            self.ntf = synthesizeNTF(self.order, self.OSR, opt=0)
+            a, g, b, c = realizeNTF(self.ntf, self.form)
+            print(self.ntf)
+            self.ABCD = stuffABCD(a, g, b, c, self.form)
+            print("ABCD:\n%s"% self.ABCD)
+        else:
+            self.form = 'CIFF'
+            self.ABCD = np.array([[1., 0.5, -0.5],[1.,0.5, 0]])
+            print(f'Before scaled ABCD {self.ABCD}')
+            self.ABCD = scaleABCD(self.ABCD, nlev=2, f=0., xlim=1., ymax=1, umax=1., N_sim=10000, N0=10)[0]
+            print(f'After scaled ABCD {self.ABCD}')
 
     def simSNR(self):
         snr_pred, amp_pred, k0, k1, se = predictSNR(self.ntf, self.OSR)

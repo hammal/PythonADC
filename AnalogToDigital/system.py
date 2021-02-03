@@ -69,7 +69,7 @@ class Sin(Input):
         self.name = name
 
     def fun(self, t):
-        return self.steeringVector * self.scalarFunction(t) 
+        return self.steeringVector * self.scalarFunction(t)
 
     def scalarFunction(self, t):
         return self.amplitude * np.sin(2. * np.pi * self.frequency * t + self.phase) + self.offset
@@ -85,7 +85,7 @@ class Constant(Input):
         self.name = name
 
     def fun(self, t):
-        return self.steeringVector * self.scalarFunction(t) 
+        return self.steeringVector * self.scalarFunction(t)
 
     def scalarFunction(self, t):
         return self.amplitude
@@ -162,12 +162,15 @@ class Control(object):
         if self.leftpadd < 0:
             self.leftpadd = 0
         self.leftpadding = np.zeros(self.leftpadd, dtype=np.int)
- 
+
+        # if 'redundancy' in options:
+        #     self.mixingMatrix = np.dot(self.mixingMatrix, options['redundancy']['redundancyMatrix'])
+        #     print(f"Mixing Matrix after redundancy:\n{self.mixingMatrix}")
         # Check if passed memory
         if memory.shape[0] == size:
             self.memory = memory
         else:
-            self.memory = np.zeros((size, mixingMatrix.shape[1]), dtype=np.int64)
+            self.memory = np.zeros((size, self.mixingMatrix.shape[1]), dtype=np.int64)
         self.size = size
         self.memory_Pointer = 0
 
@@ -181,14 +184,14 @@ class Control(object):
             print("Using references: %s" % options['references'])
             self.references = options['references']
         else:
-            self.references = np.zeros(mixingMatrix.shape[1])
+            self.references = np.zeros(self.mixingMatrix.shape[1])
 
+        self.ctrlOffset = np.zeros(self.mixingMatrix.shape[1])
         if 'offsets' in options:
             print("Using offsets: %s" % options['offsets'])
-            self.offsets = options['offsets']
-        else:
-            self.offsets = np.zeros(mixingMatrix.shape[1])
-        
+            self.ctrlOffset = np.copy(options['offsets'])
+            # print(self.ctrlOffset)
+
         if 'name' in options:
             print("Using name: %s, for storage" % options['name'])
             self.name = options['name']
@@ -199,7 +202,7 @@ class Control(object):
             self.bound = options['bound']
         else:
             self.bound = 1.
-        
+
         if 'bitsPerControl' in options:
             self.bitsPerControl = options['bitsPerControl']
         else:
@@ -211,11 +214,46 @@ class Control(object):
             self.projectionMatrix = options['projectionMatrix']
         else:
             self.projectionMatrix = -np.dot(self.mixingMatrix, np.diag(1/(np.linalg.norm(self.mixingMatrix, ord=2, axis=0)))).transpose()
+        print(f"ProjectionMatrix:\n {self.projectionMatrix}")
 
         if 'nominalCtrlInputMatrix' in options:
             self.nominalCtrlInputMatrix = options['nominalCtrlInputMatrix']
         else:
-            self.nominalCtrlInputMatrix = mixingMatrix
+            self.nominalCtrlInputMatrix = self.mixingMatrix
+
+        if 'delayChain' in options:
+            self.delayChain = True
+            self.delayChainCounter = 0
+            self.delayMask = options['delayChain']
+        else:
+            self.delayChain = False
+
+        if 'roll' in options:
+            self.rollFunction = options['roll']
+        else:
+            self.rollFunction = None
+
+
+        if 'randomlyShutOff' in options:
+            self.randomLyShutOff = True
+            self.randomLyShutOffMatrix = options["randomlyShutOff"]
+        else:
+            self.randomLyShutOff = False
+
+        if 'dither' in options:
+            self.dither = True
+            self.ditherMatrix =  options["dither"]["ditherMatrix"]
+            self.ditherOffset =  options["dither"]["ditherOffset"]
+        else:
+            self.dither = False
+
+        if 'schmittTrigger' in options:
+            self.schmittTrigger = True
+        else:
+            self.schmittTrigger = False
+
+    def getNumberOfControls(self):
+        return self.mixingMatrix.shape[1]
 
     def __getitem__(self, item):
         """
@@ -223,11 +261,10 @@ class Control(object):
         as:
         control[k]
         """
-        
+        mem = self.memory[item]
         if self.scalingSequence:
-            return self.scale * np.dot(self.scalingSequence(item), self.memory[item])
-
-        return self.scale * self.memory[item]
+            return self.scale * np.dot(self.scalingSequence(item), mem) + self.ctrlOffset
+        return self.scale * mem + self.ctrlOffset
 
     def getIndex(self, item):
         """
@@ -260,8 +297,8 @@ class Control(object):
         if bitNumber < self.bitsPerControl:
             return self.algorithmicConverter(newvector, code, bitNumber + 1)
         else:
-            return code 
-        
+            return code
+
 
     def update(self, state):
         """
@@ -269,19 +306,54 @@ class Control(object):
         """
         # Project to control space
         projectedState = np.dot(self.projectionMatrix, state)
+        if self.schmittTrigger:
+            projectedState += 1e-1 * self.memory[self.memory_Pointer - 1,:] / np.sqrt(self.projectionMatrix.shape[0])
+
+        if self.dither:
+            # print(f"ProjectedState Before: {projectedState}")
+            projectedState += np.dot(self.ditherMatrix, np.random.randn(self.ditherMatrix.shape[1])) + self.ditherOffset
+            # projectedState += np.dot(self.ditherMatrix, self.memory[self.memory_Pointer - 1, :]) + self.ditherOffset
+            # print(f"ProjectedState After: {projectedState}")
+        # print(f"B: {projectedState}")
         # print("New %s: Old %s" % (projectedState, state))
-        # print("old", (state > self.references).flatten() * 2 - 1)
+        # print("Decision", (state > self.references).flatten() * 2 - 1)
         # print("new", self.algorithmicConverter(projectedState, 0, 1))
         # self.memory[self.memory_Pointer, :] = (state > self.references).flatten() * 2 - 1
-        self.memory[self.memory_Pointer, :] = self.algorithmicConverter(projectedState, 0, 1)
-        self.memory_Pointer += 1
+        if self.delayChain:
+            # print(self.delayMask[self.delayChainCounter])
+            # print(projectedState[self.delayMask[self.delayChainCounter]])
+            # self.memory[self.memory_Pointer, self.delayMask[self.delayChainCounter] == 0] = self.memory[self.memory_Pointer - 1, self.delayMask[self.delayChainCounter] == 0]
+            # self.memory[self.memory_Pointer, :] = self.memory[self.memory_Pointer - 1, :]
+            self.memory[self.memory_Pointer, :] = np.zeros_like(self.memory[self.memory_Pointer - 1, :])
+            # print(self.memory[self.memory_Pointer, :])
+            for v in self.delayMask[self.delayChainCounter]:
+                # print(f"index {v}\nprojected State {projectedState}\n{self.algorithmicConverter(projectedState[v], 0, 1)}\nbits per {self.bitsPerControl}")
+                self.memory[self.memory_Pointer, v] = self.algorithmicConverter(projectedState[v], 0, 1)[v]
+            # self.memory[self.memory_Pointer, :] = self.algorithmicConverter(projectedState, 0, 1)
+            # print(self.memory[self.memory_Pointer, :])
+            self.delayChainCounter = (self.delayChainCounter + 1) % len(self.delayMask)
+            self.memory_Pointer += 1
+        elif self.randomLyShutOff:
+            mem = self.algorithmicConverter(projectedState, 0, 1)
+            index = self.memory_Pointer % self.randomLyShutOffMatrix.shape[1]
+            self.memory[self.memory_Pointer, :] = np.dot(np.diag(self.randomLyShutOffMatrix[:,index]), mem)
+            # print(f"mem={mem}, index={index}, memory={self.memory[self.memory_Pointer, :]}")
+            self.memory_Pointer += 1
+        else:
+            self.memory[self.memory_Pointer, :] = self.algorithmicConverter(projectedState, 0, 1)
+            # print(f"A: {self[self.memory_Pointer]}")
+            self.memory_Pointer += 1
         # print("Done Updating Control\n\n")
 
     def fun(self, t):
         """
         This is the control function evaluated at time t
         """
-        return np.dot(self.mixingMatrix, self[self.memory_Pointer - 1].reshape((self.mixingMatrix.shape[1],1))).flatten()
+        if self.rollFunction:
+            # print(f"Rolling: {self.rollFunction(self.memory_Pointer)}")
+            return np.dot(self.mixingMatrix, np.dot(self.rollFunction(self.memory_Pointer), (self[self.memory_Pointer - 1]).reshape((self.mixingMatrix.shape[1],1)))).flatten() #+ self.ctrlOffset
+        # return np.dot(self.mixingMatrix, self[self.memory_Pointer - 1].reshape((self.mixingMatrix.shape[1],1))).flatten()
+        return np.dot(self.mixingMatrix, (self[self.memory_Pointer - 1]).reshape((self.mixingMatrix.shape[1],1))).flatten() #+ self.ctrlOffset
 
     def save(self):
         """save class as self.name.txt"""
@@ -303,13 +375,30 @@ def LowerOrderSystem(system, control, input, order):
     # Check if order is within a valid range
     if order > system.order or order < 1:
         raise "Invalid order requested."
-    
+
     newSystem = System(system.A[:order, :order], system.c[:order, :order])
     newControl = Control(control.mixingMatrix[:order, :order], control.size, memory=control.memory[:,:order])
     newInput = copy.deepcopy(input)
     newInput.steeringVector = newInput.steeringVector[:order]
     newSystem.b = newInput.steeringVector
     return newSystem, newControl, newInput
+
+
+class MultiSystemController(Control):
+
+    def __init__(self, mixingMatrix, size, memory=np.array([]), options = {}):
+        Control.__init__(self, mixingMatrix, size, memory=memory, options = options)
+
+        if "numberOfSystems" in options:
+            self.numberOfSystems = options["numberOfSystems"]
+        else:
+            self.numberOfSystems = 1
+
+    def systemIndex(self, index):
+        if index:
+            return index % self.numberOfSystems
+        else:
+            return self.memory_Pointer % self.numberOfSystems
 
 
 # class Controller(object):
