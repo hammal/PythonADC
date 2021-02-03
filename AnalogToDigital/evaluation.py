@@ -103,7 +103,7 @@ class SigmaDeltaPerformance(object):
         self.estimate = estimate.flatten()
         self.estimate -= np.mean(self.estimate)
         self.freq, self.spec = self.powerSpectralDensity()
-        self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq, self.spec)
+        # self.theoreticalSpec = self.theoreticalNoiseTransferFunction(self.freq, self.spec)
 
         if not fmax:
             self.fIndex = self.findMax(self.spec)
@@ -118,7 +118,7 @@ class SigmaDeltaPerformance(object):
         self.harmonics, self.harmonicDistortion = self.computeHarmonics()
         # print(self.harmonics)
 
-    def PlotPowerSpectralDensity(self, ax = None, seperate=False, theoreticalComparision = False, label=""):
+    def PlotPowerSpectralDensity(self, ax = None, seperate=False, theoreticalComparision = False, label="", title=""):
 
         if not ax:
             fig, ax = plt.subplots()
@@ -131,6 +131,8 @@ class SigmaDeltaPerformance(object):
         else:
             # print(self.spec.shape)
             ax.semilogx(self.freq, 10 * np.log10(self.spec), label=label)
+
+        ax.set_title(title)
 
         # This is nonsense. The relation between these two should be different by one power of magnitude
         # since the SNR is the integral of the power spectral density.
@@ -226,6 +228,7 @@ class SigmaDeltaPerformance(object):
             raise "Non valid oversampling rate"
         # fb = np.int(self.fs / np.float(2 * OSR) * self.N)
         fb = np.int(self.N / OSR / 2)
+        # exit()
 
         noiseMask = np.ones_like(self.spec, dtype=bool)
         self.harmonicMask = np.zeros_like(noiseMask, dtype=bool)
@@ -260,8 +263,9 @@ class SigmaDeltaPerformance(object):
         noisePower += np.mean(noise) * (support + startOffset + harmonicSupport)
         # noisePower = np.mean(noise[startOffset:fb]) * (fb)
 
-        theoreticalNoise = np.sum(self.theoreticalSpec[noiseMask])
-        theoreticalNoise += np.mean(self.theoreticalSpec[noiseMask]) * (support + startOffset + harmonicSupport)
+        theoreticalNoise = 1e-10
+        # theoreticalNoise = np.sum(self.theoreticalSpec[noiseMask])
+        # theoreticalNoise += np.mean(self.theoreticalSpec[noiseMask]) * (support + startOffset + harmonicSupport)
 
         # print(signalPower, noisePower, OSR)
         DR = 10 * np.log10(1./noisePower)
@@ -320,7 +324,9 @@ class SigmaDeltaPerformance(object):
         """
         Compute Power-spectral density
         """
-        self.N = min([256 * 2 * self.OSR, self.estimate.shape[0]])
+        # self.N = min([256 * self.OSR, self.estimate.shape[0]])
+        self.N = min([self.estimate.shape[0], 1 << 12])
+        self.NFFT = self.N
         window = 'hanning'
 
         wind = np.hanning(self.N)
@@ -337,7 +343,7 @@ class SigmaDeltaPerformance(object):
         # spectrum = spectrum[:self.N/2]
         # freq = np.fft.fftfreq(self.N)[:self.N/2]
         # spectrum /= (self.N / 2) * (self.fs / 2)
-        freq, spectrum = scipy.signal.welch(self.estimate, fs=self.fs, window=window, nperseg=self.N, noverlap=None, nfft=None, return_onesided=True, scaling='spectrum', axis=0)
+        freq, spectrum = scipy.signal.welch(self.estimate, fs=self.fs, window=window, nperseg=self.N, noverlap=None, nfft=self.NFFT, return_onesided=True, scaling='spectrum', axis=0)
         # spectrum /= (FullScale / 4. * w1) ** 2
         return freq, spectrum
 
